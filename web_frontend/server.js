@@ -1,0 +1,57 @@
+/**
+ * Aditya Security Guard - Web app server
+ *
+ * Serves the static HTML/CSS/JS dashboard AND now connects to a local
+ * MongoDB instance for authentication and user (admin/guard) management.
+ *
+ * Everything else (duty places, assignments, QR scans, uploaded images,
+ * duty status) still runs on the static mock data in public/js/data.js -
+ * only login and "Add/Get Security" are backed by MongoDB for now.
+ *
+ * Ports are intentionally separate:
+ *   - Web server:  PORT in .env (default 3000)
+ *   - MongoDB:     part of MONGO_URI in .env (default 27017, MongoDB's
+ *                  standard port) - it is a completely separate process.
+ *
+ * First-time setup:
+ *   1. Make sure a local MongoDB server is running (see README.md)
+ *   2. cp .env.example .env   (adjust PORT / MONGO_* if needed)
+ *   3. npm install
+ *   4. Create the first admin user directly in mongosh (see README.md
+ *      "Creating the first admin user") - use `npm run hash` to get a
+ *      bcrypt hash for your chosen password first.
+ *   5. npm start
+ *   6. Log in as that admin, then use "Add Security" in the web app to
+ *      create every other admin/guard account from here on.
+ */
+
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const connectDB = require('./config/db');
+
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', database: 'MongoDB (see /api/health/db for connection state)' });
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Aditya Security Guard web app running at http://localhost:${PORT}`);
+  });
+});
