@@ -46,8 +46,24 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: 'MongoDB (see /api/health/db for connection state)' });
 });
 
+// Any /api/* path that didn't match a route above gets a JSON 404 instead
+// of Express's default HTML error page. Without this, a typo'd endpoint or
+// an old server process missing a newly-added route returns HTML, and the
+// frontend's res.json() call fails with a confusing
+// "Unexpected token '<', <!DOCTYPE..." error instead of a clear message.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `No API route: ${req.method} ${req.originalUrl}` });
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Final safety net: turn any uncaught error into JSON instead of Express's
+// default HTML error page, so the frontend always gets parseable JSON back.
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Unexpected server error.' });
 });
 
 connectDB().then(() => {

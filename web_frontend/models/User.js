@@ -19,6 +19,7 @@ const UserSchema = new Schema(
     designation: { type: String, default: 'Security Guard' },
     mobile: { type: String, required: true },
     role: { type: String, enum: ['admin', 'security'], required: true },
+    blocked: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

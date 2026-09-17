@@ -4,24 +4,49 @@
  * data.js - only auth and user/guard management go through here.
  */
 
+/**
+ * Reads a fetch Response as JSON, but fails with a clear error instead of
+ * a cryptic "Unexpected token '<'..." if the server returned HTML (e.g. an
+ * unmatched route, a proxy error page, or the server needing a restart
+ * after a code change) instead of JSON.
+ */
+async function readJsonResponse(res) {
+  const text = await res.text();
+  const contentType = res.headers.get('content-type') || '';
+
+  if (!contentType.includes('application/json')) {
+    const snippet = text.replace(/\s+/g, ' ').slice(0, 120);
+    throw new Error(
+      `Server returned a non-JSON response (HTTP ${res.status}). This usually means the API route ` +
+      `wasn't found or the server needs restarting. Response started with: "${snippet}"`
+    );
+  }
+
+  const body = text ? JSON.parse(text) : {};
+  if (!res.ok) {
+    throw new Error(body.error || `Request failed (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
 async function loginViaApi(roll_no, password) {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ roll_no, password }),
   });
-  const body = await res.json();
-  if (!res.ok) {
-    throw new Error(body.error || 'Login failed.');
-  }
-  return body; // { roll_no, first_name, designation, mobile, role }
+  return readJsonResponse(res); // { roll_no, first_name, designation, mobile, role }
 }
 
-async function fetchUsersViaApi(role) {
-  const qs = role ? `?role=${encodeURIComponent(role)}` : '';
-  const res = await fetch(`/api/users${qs}`);
-  if (!res.ok) throw new Error('Failed to load users.');
-  return res.json();
+async function fetchUsersViaApi({ role, search, page = 1, limit = 10 } = {}) {
+  const params = new URLSearchParams();
+  if (role) params.set('role', role);
+  if (search) params.set('search', search);
+  params.set('page', page);
+  params.set('limit', limit);
+
+  const res = await fetch(`/api/users?${params.toString()}`);
+  return readJsonResponse(res); // { data, total, page, limit, totalPages }
 }
 
 async function addUserViaApi(payload) {
@@ -30,9 +55,33 @@ async function addUserViaApi(payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  const body = await res.json();
-  if (!res.ok) {
-    throw new Error(body.error || 'Failed to add user.');
-  }
-  return body;
+  return readJsonResponse(res);
+}
+
+async function bulkAddUsersViaApi(users) {
+  const res = await fetch('/api/users/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ users }),
+  });
+  return readJsonResponse(res); // { insertedCount, skippedCount, results }
+}
+
+async function updateUserViaApi(id, payload) {
+  const res = await fetch(`/api/users/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return readJsonResponse(res);
+}
+
+async function toggleBlockUserViaApi(id) {
+  const res = await fetch(`/api/users/${encodeURIComponent(id)}/toggle-block`, { method: 'PATCH' });
+  return readJsonResponse(res); // { _id, roll_no, blocked }
+}
+
+async function deleteUserViaApi(id) {
+  const res = await fetch(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return readJsonResponse(res);
 }

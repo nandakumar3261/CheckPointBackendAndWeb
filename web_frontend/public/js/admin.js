@@ -44,6 +44,18 @@ function sectionHead(title, sub) {
   return `<div class="section-head"><h2>${title}</h2><p>${sub}</p></div>`;
 }
 
+function openModal(html) {
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('modalOverlay').style.display = 'none';
+  document.getElementById('modalBox').innerHTML = '';
+}
+document.getElementById('modalOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+
 const renderers = {
   home: () => `
     ${sectionHead('Welcome back, ' + user.first_name.split(' ')[0], user.designation + ' • Roll No ' + user.roll_no)}
@@ -108,7 +120,7 @@ const renderers = {
   `,
 
   addSecurity: () => `
-    ${sectionHead('Add Security', 'Register a new account. Saved to MongoDB (the same "users" collection used for login).')}
+    ${sectionHead('Add Security', 'Register a new account, one at a time or in bulk via CSV. Saved to MongoDB (the same "users" collection used for login).')}
     <div class="two-col">
       <div class="card">
         <div class="card-title">New account</div>
@@ -136,12 +148,50 @@ const renderers = {
         <div id="addedGuardsList"><p style="color:var(--ink-500); font-size:13px;">None yet</p></div>
       </div>
     </div>
+
+    <div class="card">
+      <div class="card-title">Bulk upload (CSV)</div>
+      <p style="color:var(--ink-500); font-size:12.5px; margin-bottom:4px;">
+        Columns: <code>roll_no, password, first_name, designation, mobile, role</code> — role must be
+        <code>admin</code> or <code>security</code>. First row must be the header row.
+      </p>
+      <div class="bulk-upload-box">
+        <div class="row">
+          <button class="btn btn-outline" id="downloadTemplateBtn" type="button">Download CSV Template</button>
+          <input type="file" id="csvFileInput" accept=".csv,text/csv" />
+          <button class="btn btn-primary" id="uploadCsvBtn" type="button" style="width:auto; padding:10px 18px;" disabled>Upload CSV</button>
+        </div>
+        <div id="bulkUploadStatus" style="margin-top:10px; font-size:12.5px; color:var(--ink-500);"></div>
+        <div id="bulkResultList" class="bulk-result-list"></div>
+      </div>
+    </div>
   `,
 
   getSecurityData: () => `
     ${sectionHead('Get Security Data', 'All registered accounts, read live from MongoDB.')}
     <div class="card">
+      <div class="data-toolbar">
+        <div class="search-field">
+          <input type="text" id="securitySearchInput" placeholder="Search by name, roll no, mobile, or designation..." />
+        </div>
+        <div class="page-size-field">
+          <label for="securityPageSizeSelect">Rows per page</label>
+          <select id="securityPageSizeSelect">
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
       <div id="securityDataTableWrap"><p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p></div>
+      <div class="pagination-bar">
+        <div class="page-info" id="securityPageInfo"></div>
+        <div class="page-controls">
+          <button class="btn btn-outline" id="securityPrevBtn" style="padding:8px 16px;">Previous</button>
+          <button class="btn btn-outline" id="securityNextBtn" style="padding:8px 16px;">Next</button>
+        </div>
+      </div>
     </div>
   `,
 
@@ -303,27 +353,216 @@ function attachHandlers(section) {
         submitBtn.disabled = false;
       }
     });
+
+    // ---- CSV bulk upload ----
+    document.getElementById('downloadTemplateBtn').addEventListener('click', downloadCsvTemplate);
+
+    const fileInput = document.getElementById('csvFileInput');
+    const uploadBtn = document.getElementById('uploadCsvBtn');
+    const statusBox = document.getElementById('bulkUploadStatus');
+    const resultList = document.getElementById('bulkResultList');
+    let selectedFile = null;
+
+    fileInput.addEventListener('change', (e) => {
+      selectedFile = e.target.files[0] || null;
+      uploadBtn.disabled = !selectedFile;
+      statusBox.textContent = selectedFile ? `Selected: ${selectedFile.name}` : '';
+      resultList.innerHTML = '';
+    });
+
+    uploadBtn.addEventListener('click', () => {
+      if (!selectedFile) return;
+      uploadBtn.disabled = true;
+      statusBox.textContent = 'Reading file...';
+      resultList.innerHTML = '';
+
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const rows = parseCsv(ev.target.result);
+          if (!rows.length) {
+            statusBox.textContent = 'No data rows found in that file.';
+            return;
+          }
+          statusBox.textContent = `Uploading ${rows.length} row(s)...`;
+          const result = await bulkAddUsersViaApi(rows);
+          statusBox.innerHTML = `<span class="badge badge-success">${result.insertedCount} added</span> &nbsp; <span class="badge ${result.skippedCount ? 'badge-danger' : 'badge-amber'}">${result.skippedCount} skipped</span>`;
+          const skipped = result.results.filter(r => r.status === 'skipped');
+          resultList.innerHTML = skipped.length
+            ? skipped.map(r => `<div class="row-item"><span>Row ${r.row} (${r.roll_no || '—'})</span><span style="color:var(--danger);">${r.reason}</span></div>`).join('')
+            : '<div style="color:var(--ink-500); padding:6px 0;">No rows skipped.</div>';
+        } catch (err) {
+          statusBox.innerHTML = `<span style="color:var(--danger);">${err.message}</span>`;
+        } finally {
+          uploadBtn.disabled = false;
+          fileInput.value = '';
+          selectedFile = null;
+        }
+      };
+      reader.readAsText(selectedFile);
+    });
   }
 
   if (section === 'getSecurityData') {
-    fetchUsersViaApi()
-      .then(users => {
-        const wrap = document.getElementById('securityDataTableWrap');
-        if (!users.length) {
-          wrap.innerHTML = `<p style="color:var(--ink-500); font-size:13px;">No accounts in MongoDB yet. Create the first admin in mongosh (see README.md) or add one via "Add Security".</p>`;
-          return;
-        }
+    const state = { search: '', page: 1, limit: 10 };
+    let currentRows = []; // cache of the currently-rendered page, for the edit modal
+
+    const renderTable = (res) => {
+      currentRows = res.data;
+      const wrap = document.getElementById('securityDataTableWrap');
+      if (!res.data.length) {
+        wrap.innerHTML = `<p style="color:var(--ink-500); font-size:13px;">${state.search ? 'No matching accounts found.' : 'No accounts in MongoDB yet. Create the first admin in mongosh (see README.md) or add one via "Add Security".'}</p>`;
+      } else {
+        const startSerial = (res.page - 1) * res.limit;
         wrap.innerHTML = `
-          <table>
-            <thead><tr><th>Name</th><th>Roll No</th><th>Role</th><th>Mobile</th><th>Designation</th></tr></thead>
-            <tbody>
-              ${users.map(u => `<tr><td>${u.first_name}</td><td>${u.roll_no}</td><td><span class="badge ${u.role === 'admin' ? 'badge-amber' : 'badge-success'}">${u.role}</span></td><td>${u.mobile}</td><td>${u.designation}</td></tr>`).join('')}
-            </tbody>
-          </table>`;
-      })
-      .catch(err => {
-        document.getElementById('securityDataTableWrap').innerHTML = `<p style="color:var(--danger); font-size:13px;">Could not load from MongoDB: ${err.message}</p>`;
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>#</th><th>Name</th><th>Roll No</th><th>Role</th><th>Mobile</th><th>Designation</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                ${res.data.map((u, i) => `
+                  <tr data-id="${u._id}">
+                    <td class="serial-col">${startSerial + i + 1}</td>
+                    <td>${u.first_name}</td>
+                    <td>${u.roll_no}</td>
+                    <td><span class="badge ${u.role === 'admin' ? 'badge-amber' : 'badge-success'}">${u.role}</span></td>
+                    <td>${u.mobile}</td>
+                    <td>${u.designation}</td>
+                    <td><span class="badge ${u.blocked ? 'badge-blocked' : 'badge-success'}">${u.blocked ? 'Blocked' : 'Active'}</span></td>
+                    <td>
+                      <div class="row-actions">
+                        <button class="edit-btn" data-id="${u._id}" title="Edit">✏️</button>
+                        <button class="${u.blocked ? 'unblock-btn' : 'block-btn'}" data-id="${u._id}" title="${u.blocked ? 'Unblock' : 'Block'}">${u.blocked ? '🔓' : '🚫'}</button>
+                        <button class="delete-btn" data-id="${u._id}" title="Delete">🗑</button>
+                      </div>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+        wireRowActions();
+      }
+      const from = res.total === 0 ? 0 : (res.page - 1) * res.limit + 1;
+      const to = Math.min(res.page * res.limit, res.total);
+      document.getElementById('securityPageInfo').textContent = `Showing ${from}-${to} of ${res.total}`;
+      document.getElementById('securityPrevBtn').disabled = res.page <= 1;
+      document.getElementById('securityNextBtn').disabled = res.page >= res.totalPages;
+    };
+
+    const load = () => {
+      document.getElementById('securityDataTableWrap').innerHTML = '<p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p>';
+      fetchUsersViaApi({ search: state.search, page: state.page, limit: state.limit })
+        .then(renderTable)
+        .catch(err => {
+          document.getElementById('securityDataTableWrap').innerHTML = `<p style="color:var(--danger); font-size:13px;">Could not load from MongoDB: ${err.message}</p>`;
+        });
+    };
+
+    function wireRowActions() {
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => openEditModal(btn.dataset.id));
       });
+      document.querySelectorAll('.block-btn, .unblock-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const u = currentRows.find(r => r._id === btn.dataset.id);
+          const verb = u && u.blocked ? 'unblock' : 'block';
+          if (!confirm(`Are you sure you want to ${verb} ${u ? u.first_name : 'this account'}?`)) return;
+          try {
+            await toggleBlockUserViaApi(btn.dataset.id);
+            load();
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+      });
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const u = currentRows.find(r => r._id === btn.dataset.id);
+          if (!confirm(`Delete ${u ? u.first_name : 'this account'} (${u ? u.roll_no : ''})? This cannot be undone.`)) return;
+          try {
+            await deleteUserViaApi(btn.dataset.id);
+            load();
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+      });
+    }
+
+    function openEditModal(id) {
+      const u = currentRows.find(r => r._id === id);
+      if (!u) return;
+      openModal(`
+        <h3>Edit account — ${u.roll_no}</h3>
+        <form id="editUserForm">
+          <div class="field"><label>Full name</label><input required name="first_name" value="${u.first_name}" /></div>
+          <div class="field"><label>Designation</label><input name="designation" value="${u.designation}" /></div>
+          <div class="field"><label>Mobile</label><input required name="mobile" value="${u.mobile}" /></div>
+          <div class="field">
+            <label>Role</label>
+            <select name="role">
+              <option value="security" ${u.role === 'security' ? 'selected' : ''}>Security Guard</option>
+              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+            </select>
+          </div>
+          <div class="field"><label>New password (leave blank to keep current)</label><input type="text" name="password" /></div>
+          <div class="error-text" id="editUserError"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="cancelEditBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary" style="width:auto; padding:10px 20px;">Save Changes</button>
+          </div>
+        </form>
+      `);
+      document.getElementById('cancelEditBtn').addEventListener('click', closeModal);
+      document.getElementById('editUserForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        const payload = {
+          first_name: f.get('first_name'),
+          designation: f.get('designation'),
+          mobile: f.get('mobile'),
+          role: f.get('role'),
+        };
+        const pwd = f.get('password');
+        if (pwd && pwd.trim()) payload.password = pwd.trim();
+
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        try {
+          await updateUserViaApi(id, payload);
+          closeModal();
+          load();
+        } catch (err) {
+          document.getElementById('editUserError').textContent = err.message;
+          submitBtn.disabled = false;
+        }
+      });
+    }
+
+    let searchTimer;
+    document.getElementById('securitySearchInput').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.search = e.target.value.trim();
+        state.page = 1;
+        load();
+      }, 300);
+    });
+
+    document.getElementById('securityPageSizeSelect').addEventListener('change', (e) => {
+      state.limit = parseInt(e.target.value, 10) || 10;
+      state.page = 1;
+      load();
+    });
+
+    document.getElementById('securityPrevBtn').addEventListener('click', () => {
+      if (state.page > 1) { state.page -= 1; load(); }
+    });
+    document.getElementById('securityNextBtn').addEventListener('click', () => {
+      state.page += 1;
+      load();
+    });
+
+    load();
   }
 
   if (section === 'addDutyPlaces') {

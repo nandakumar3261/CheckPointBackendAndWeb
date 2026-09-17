@@ -22,6 +22,10 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid roll number or password.' });
     }
 
+    if (user.blocked) {
+      return res.status(403).json({ error: 'This account has been blocked. Contact an administrator.' });
+    }
+
     // Demo auth only - no session/JWT issuance here yet.
     res.json({
       roll_no: user.roll_no,

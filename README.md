@@ -176,18 +176,53 @@ passwords directly.
 
 **What's included:**
 - `server.js` — Express server; connects to MongoDB on startup via `config/db.js`, then mounts:
-  - `POST /api/auth/login` — checks roll_no/password against MongoDB
-  - `GET /api/users?role=admin|security` — list accounts
-  - `POST /api/users` — create a new account (used by "Add Security")
-- `models/User.js` — Mongoose schema: `roll_no`, `password` (bcrypt hash), `first_name`, `designation`, `mobile`, `role` (`admin` | `security`) — matches your real data fields exactly
+  - `POST /api/auth/login` — checks roll_no/password against MongoDB, and rejects blocked accounts
+  - `GET /api/users?role=&search=&page=&limit=` — paginated, searchable list of accounts (search matches name, roll no, mobile, **and designation**)
+  - `POST /api/users` — create a single account (used by "Add Security")
+  - `POST /api/users/bulk` — create many accounts from a parsed CSV (used by "Add Security" bulk upload); returns a per-row `inserted`/`skipped` summary so bad rows don't block good ones
+  - `PUT /api/users/:id` — edit an account's name, designation, mobile, role, and optionally its password (roll_no stays fixed as the login key)
+  - `PATCH /api/users/:id/toggle-block` — block or unblock an account
+  - `DELETE /api/users/:id` — permanently remove an account
+- `models/User.js` — Mongoose schema: `roll_no`, `password` (bcrypt hash), `first_name`, `designation`, `mobile`, `role` (`admin` | `security`), `blocked` (boolean, default false)
 - `hash-password.js` — run with `npm run hash -- <password>` to get a bcrypt hash for manually inserting a user in mongosh (used for the first admin only)
+- `public/js/csv.js` — CSV parsing (quoted-field aware) and the "Download CSV Template" button used by bulk upload
 - `public/js/api.js` — thin `fetch()` wrapper the frontend uses to talk to the API above
 - `public/index.html` — login page (asks for Roll No + Password), calls `POST /api/auth/login`
-- `public/admin.html` + `public/js/admin.js` — admin dashboard; **"Add Security"** now has `roll_no`, `password`, `role` (Admin / Security Guard) fields and posts to MongoDB; **"Get Security Data"** now reads live from MongoDB. The other 12 sections are unchanged (static mock data).
+- `public/admin.html` + `public/js/admin.js` — admin dashboard:
+  - **"Add Security"** — single-account form plus a **bulk CSV upload**: download a template, fill it in, upload it, and see which rows were inserted vs. skipped (with reasons)
+  - **"Get Security Data"** — reads live from MongoDB with a **search box** (name / roll no / mobile / designation), a **rows-per-page dropdown** (10/20/50/100), a **serial number column**, **Previous/Next** pagination, a **Status** column (Active/Blocked), and per-row **✏️ Edit / 🚫 Block / 🗑 Delete** actions on the right. Edit opens a small modal; Block and Delete ask for confirmation first.
+  - The sidebar (including the Logout button) now stays pinned to the viewport regardless of how tall the table gets — it no longer drifts down the page as more rows are shown
+  - The other 12 sections are unchanged (static mock data)
 - `public/user.html` + `public/js/user.js` — guard dashboard, unchanged aside from checking for role `"security"` to match the real role value
 - `public/css/style.css` — shared theme (Big Shoulders Display for headings, Inter for body)
 
+**CSV bulk upload format** (also downloadable as a template from the "Add Security" page):
+```csv
+roll_no,password,first_name,designation,mobile,role
+1001,Pass@123,John Doe,Security Guard,9000000000,security
+```
+`role` must be exactly `admin` or `security`. Passwords in the CSV are plaintext going in — the server hashes each one with bcrypt before saving, same as the single-add form. Rows with a duplicate `roll_no`, a missing required field, or an invalid `role` are skipped individually and reported back, without failing the rest of the file.
+
 All JS files were syntax-checked (`node --check`) and the static pages were verified to load correctly. The live MongoDB connection itself hasn't been tested end-to-end in this sandbox (no MongoDB or network access here) — test it with a real local MongoDB on your machine.
+
+### Troubleshooting: "Unexpected token '<', is not valid JSON"
+
+This means the browser got an HTML page back where it expected JSON —
+almost always because the request hit a route Express doesn't recognize
+(a typo'd URL, or **the server process still running old code** — Node
+doesn't reload `server.js`/`routes/*.js` automatically, so after pulling
+an update you must stop (`Ctrl+C`) and re-run `npm start`). Two things
+now make this easier to diagnose:
+- Any unmatched `/api/*` route now returns a proper JSON 404 instead of
+  Express's default HTML error page.
+- `public/js/api.js` now checks the response's content type before
+  parsing it, and if it's not JSON, throws a clear error naming the HTTP
+  status and the start of what was actually returned, instead of the raw
+  parse exception.
+
+If you still see this after restarting the server, check the browser's
+Network tab for the failing request and read the actual response body —
+it will now say plainly what went wrong.
 
 ---
 
