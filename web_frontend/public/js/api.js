@@ -85,3 +85,54 @@ async function deleteUserViaApi(id) {
   const res = await fetch(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
   return readJsonResponse(res);
 }
+
+/**
+ * Duty places (see routes/dutyPlaces.js, models/DutyPlace.js).
+ */
+
+async function fetchDutyPlacesViaApi({ search, page = 1, limit = 10 } = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  params.set('page', page);
+  params.set('limit', limit);
+
+  const res = await fetch(`/api/duty-places?${params.toString()}`);
+  return readJsonResponse(res); // { data, total, page, limit, totalPages }
+}
+
+async function fetchDutyPlaceOptionsViaApi() {
+  const res = await fetch('/api/duty-places/options');
+  return readJsonResponse(res); // { data }
+}
+
+async function addDutyPlaceViaApi(payload) {
+  const res = await fetch('/api/duty-places', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return readJsonResponse(res);
+}
+
+async function addSubPlacesViaApi(id, subPlaces) {
+  const res = await fetch(`/api/duty-places/${encodeURIComponent(id)}/sub-places`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subPlaces }),
+  });
+  return readJsonResponse(res);
+}
+
+async function updateDutyPlaceViaApi(id, payload) {
+  const res = await fetch(`/api/duty-places/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return readJsonResponse(res);
+}
+
+async function deleteDutyPlaceViaApi(id) {
+  const res = await fetch(`/api/duty-places/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return readJsonResponse(res);
+}

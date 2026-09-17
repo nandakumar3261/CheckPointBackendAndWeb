@@ -4,7 +4,6 @@ const { Schema } = mongoose;
 const SubPlaceSchema = new Schema(
   {
     name: { type: String, required: true },
-    qrCode: { type: String, required: true },
   },
   { _id: false }
 );

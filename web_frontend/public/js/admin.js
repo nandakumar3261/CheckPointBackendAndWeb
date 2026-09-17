@@ -17,6 +17,21 @@ const titles = {
   contact: 'Contact Us',
 };
 
+// Formats an ISO date string (e.g. a MongoDB createdAt) as a readable
+// "DD-MM-YYYY, hh:mm" local date + time, used wherever we show an "Added On".
+function formatDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 document.getElementById('whoName').textContent = user ? user.first_name : '';
 document.getElementById('avatarInitial').textContent = user ? user.first_name.charAt(0) : '';
 
@@ -174,14 +189,17 @@ const renderers = {
         <div class="search-field">
           <input type="text" id="securitySearchInput" placeholder="Search by name, roll no, mobile, or designation..." />
         </div>
-        <div class="page-size-field">
-          <label for="securityPageSizeSelect">Rows per page</label>
-          <select id="securityPageSizeSelect">
-            <option value="10" selected>10</option>
-            <option value="20">20</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-          </select>
+        <div class="toolbar-right">
+          <div class="page-size-field">
+            <label for="securityPageSizeSelect">Rows per page</label>
+            <select id="securityPageSizeSelect">
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+          <button class="btn btn-outline" id="downloadSecurityBtn" type="button">⬇ Download Excel</button>
         </div>
       </div>
       <div id="securityDataTableWrap"><p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p></div>
@@ -197,24 +215,75 @@ const renderers = {
 
   addDutyPlaces: () => `
     ${sectionHead('Add Duty Places', 'A main place (site) contains one or more sub-places, each with its own QR code.')}
-    <div class="two-col">
-      <div class="card">
+
+    <div class="tabs" id="dutyPlaceTabs">
+      <button class="tab-btn active" data-tab="newPlace" type="button">New Place</button>
+      <button class="tab-btn" data-tab="addSubPlaces" type="button">Add Sub Places</button>
+      <button class="tab-btn" data-tab="existingPlaces" type="button">Existing Duty Places</button>
+    </div>
+
+    <div class="tab-panel" id="tab-newPlace">
+      <div class="card" style="max-width:520px;">
         <div class="card-title">New duty place</div>
         <div class="field"><label>Main place</label><input id="mainPlaceInput" placeholder="e.g. North Campus" /></div>
         <div class="field" style="display:flex; gap:8px; align-items:flex-end;">
           <div style="flex:1;"><label style="display:block; font-size:12.5px; color:var(--ink-300); margin-bottom:6px;">Sub place</label><input id="subPlaceInput" placeholder="e.g. Gate C" /></div>
-          <button class="btn btn-outline" id="addSubPlaceBtn">+</button>
+          <button class="btn btn-outline" id="addSubPlaceBtn" type="button">+</button>
         </div>
         <div id="pendingSubPlaces" style="margin:10px 0;"></div>
+        <div class="error-text" id="newPlaceError"></div>
         <button class="btn btn-primary" id="saveDutyPlaceBtn" style="width:auto; padding:10px 22px;">Save Duty Place</button>
       </div>
+    </div>
+
+    <div class="tab-panel" id="tab-addSubPlaces" style="display:none;">
+      <div class="card" style="max-width:520px;">
+        <div class="card-title">Add sub places to an existing main place</div>
+        <div class="field">
+          <label>Main place</label>
+          <select id="subPlacesMainSelect"><option value="">Select a main place</option></select>
+        </div>
+        <div class="field">
+          <label style="display:block; font-size:12.5px; color:var(--ink-300); margin-bottom:6px;">Existing sub places</label>
+          <div id="existingSubPlacesChips"><span style="color:var(--ink-500); font-size:12.5px;">Select a main place above</span></div>
+        </div>
+        <div class="field" style="display:flex; gap:8px; align-items:flex-end;">
+          <div style="flex:1;"><label style="display:block; font-size:12.5px; color:var(--ink-300); margin-bottom:6px;">New sub place</label><input id="newSubPlaceInput" placeholder="e.g. Gate D" disabled /></div>
+          <button class="btn btn-outline" id="addNewSubPlaceBtn" type="button" disabled>+</button>
+        </div>
+        <div id="pendingNewSubPlaces" style="margin:10px 0;"></div>
+        <div class="error-text" id="addSubPlacesError"></div>
+        <button class="btn btn-primary" id="saveSubPlacesBtn" style="width:auto; padding:10px 22px;" disabled>Add Sub Places</button>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-existingPlaces" style="display:none;">
       <div class="card">
-        <div class="card-title">Existing duty places</div>
-        ${MOCK.dutyPlaces.map(p => `
-          <div style="margin-bottom:14px;">
-            <b style="font-size:13.5px;">${p.mainPlace}</b><br>
-            ${p.subPlaces.map(s => `<span class="chip">${s}</span>`).join('')}
-          </div>`).join('')}
+        <div class="data-toolbar">
+          <div class="search-field">
+            <input type="text" id="dutyPlaceSearchInput" placeholder="Search by main place or sub place..." />
+          </div>
+          <div class="toolbar-right">
+            <div class="page-size-field">
+              <label for="dutyPlacePageSizeSelect">Rows per page</label>
+              <select id="dutyPlacePageSizeSelect">
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+            <button class="btn btn-outline" id="downloadDutyPlacesBtn" type="button">⬇ Download Excel</button>
+          </div>
+        </div>
+        <div id="dutyPlacesTableWrap"><p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p></div>
+        <div class="pagination-bar">
+          <div class="page-info" id="dutyPlacesPageInfo"></div>
+          <div class="page-controls">
+            <button class="btn btn-outline" id="dutyPlacesPrevBtn" style="padding:8px 16px;">Previous</button>
+            <button class="btn btn-outline" id="dutyPlacesNextBtn" style="padding:8px 16px;">Next</button>
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -562,25 +631,395 @@ function attachHandlers(section) {
       load();
     });
 
+    document.getElementById('downloadSecurityBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('downloadSecurityBtn');
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Preparing...';
+      try {
+        const res = await fetchUsersViaApi({ search: state.search, page: 1, limit: 10000 });
+        const rows = res.data.map((u, i) => ({
+          '#': i + 1,
+          'Name': u.first_name,
+          'Roll No': u.roll_no,
+          'Role': u.role,
+          'Mobile': u.mobile,
+          'Designation': u.designation,
+          'Status': u.blocked ? 'Blocked' : 'Active',
+          'Added On': formatDateTime(u.createdAt),
+        }));
+        exportRowsToExcel(rows, { filename: `security_data_${Date.now()}.xlsx`, sheetName: 'Security Data' });
+      } catch (err) {
+        alert('Could not export: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    });
+
     load();
   }
 
   if (section === 'addDutyPlaces') {
-    const pending = [];
-    const renderPending = () => {
-      document.getElementById('pendingSubPlaces').innerHTML = pending.map(s => `<span class="chip">${s}</span>`).join('');
-    };
-    document.getElementById('addSubPlaceBtn').addEventListener('click', () => {
-      const input = document.getElementById('subPlaceInput');
-      if (input.value.trim()) { pending.push(input.value.trim()); input.value = ''; renderPending(); }
+    // ---------- Tab switching ----------
+    const tabNames = ['newPlace', 'addSubPlaces', 'existingPlaces'];
+    document.querySelectorAll('#dutyPlaceTabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#dutyPlaceTabs .tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        tabNames.forEach(t => {
+          document.getElementById('tab-' + t).style.display = (t === btn.dataset.tab) ? 'block' : 'none';
+        });
+        if (btn.dataset.tab === 'addSubPlaces') loadMainPlaceOptions();
+        if (btn.dataset.tab === 'existingPlaces') loadExistingPlaces();
+      });
     });
-    document.getElementById('saveDutyPlaceBtn').addEventListener('click', () => {
+
+    // Renders a list of pending chip strings into a container, each with a
+    // small "x" to remove it before saving. Shared shape used by tab 1,
+    // tab 2, and the "add sub place" quick-modal.
+    function renderPendingChips(containerId, list, onRemove) {
+      const box = document.getElementById(containerId);
+      box.innerHTML = list.map((s, i) =>
+        `<span class="chip">${s} <span class="chip-remove" data-i="${i}">✕</span></span>`).join('');
+      box.querySelectorAll('.chip-remove').forEach(x => {
+        x.addEventListener('click', () => { list.splice(parseInt(x.dataset.i, 10), 1); onRemove(); });
+      });
+    }
+
+    // ---------- Tab 1: New Place ----------
+    const pending = [];
+    const renderPending = () => renderPendingChips('pendingSubPlaces', pending, renderPending);
+
+    const addPendingFrom = (inputId, list, rerender) => {
+      const input = document.getElementById(inputId);
+      const val = input.value.trim();
+      if (val && !list.some(p => p.toLowerCase() === val.toLowerCase())) {
+        list.push(val);
+        input.value = '';
+        rerender();
+      }
+      input.focus();
+    };
+
+    document.getElementById('addSubPlaceBtn').addEventListener('click', () => addPendingFrom('subPlaceInput', pending, renderPending));
+    document.getElementById('subPlaceInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addSubPlaceBtn').click(); }
+    });
+
+    document.getElementById('saveDutyPlaceBtn').addEventListener('click', async () => {
+      const errBox = document.getElementById('newPlaceError');
+      errBox.textContent = '';
       const main = document.getElementById('mainPlaceInput').value.trim();
-      if (!main || pending.length === 0) { alert('Enter a main place and at least one sub place'); return; }
-      alert('Duty place saved (local demo list)');
-      document.getElementById('mainPlaceInput').value = '';
-      pending.length = 0;
-      renderPending();
+      if (!main || pending.length === 0) { errBox.textContent = 'Enter a main place and at least one sub place.'; return; }
+
+      const btn = document.getElementById('saveDutyPlaceBtn');
+      btn.disabled = true;
+      try {
+        await addDutyPlaceViaApi({ mainPlace: main, subPlaces: pending.slice() });
+        document.getElementById('mainPlaceInput').value = '';
+        pending.length = 0;
+        renderPending();
+        alert('Duty place saved.');
+      } catch (err) {
+        errBox.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // ---------- Tab 2: Add Sub Places ----------
+    let mainPlaceOptions = [];
+    const pendingNew = [];
+    const renderPendingNew = () => renderPendingChips('pendingNewSubPlaces', pendingNew, renderPendingNew);
+
+    async function loadMainPlaceOptions() {
+      const select = document.getElementById('subPlacesMainSelect');
+      const previous = select.value;
+      select.innerHTML = '<option value="">Loading...</option>';
+      try {
+        const res = await fetchDutyPlaceOptionsViaApi();
+        mainPlaceOptions = res.data;
+        select.innerHTML = '<option value="">Select a main place</option>' +
+          mainPlaceOptions.map(p => `<option value="${p._id}">${p.mainPlace}</option>`).join('');
+        if (previous && mainPlaceOptions.some(p => p._id === previous)) {
+          select.value = previous;
+          select.dispatchEvent(new Event('change'));
+        }
+      } catch (err) {
+        select.innerHTML = '<option value="">Could not load places</option>';
+      }
+    }
+
+    document.getElementById('subPlacesMainSelect').addEventListener('change', (e) => {
+      const id = e.target.value;
+      const chipsBox = document.getElementById('existingSubPlacesChips');
+      const input = document.getElementById('newSubPlaceInput');
+      const addBtn = document.getElementById('addNewSubPlaceBtn');
+      const saveBtn = document.getElementById('saveSubPlacesBtn');
+
+      pendingNew.length = 0;
+      renderPendingNew();
+
+      if (!id) {
+        chipsBox.innerHTML = '<span style="color:var(--ink-500); font-size:12.5px;">Select a main place above</span>';
+        input.disabled = true; addBtn.disabled = true; saveBtn.disabled = true;
+        return;
+      }
+      const place = mainPlaceOptions.find(p => p._id === id);
+      chipsBox.innerHTML = (place && place.subPlaces.length)
+        ? place.subPlaces.map(s => `<span class="chip">${s.name}</span>`).join('')
+        : '<span style="color:var(--ink-500); font-size:12.5px;">No sub places yet</span>';
+      input.disabled = false; addBtn.disabled = false; saveBtn.disabled = false;
+    });
+
+    document.getElementById('addNewSubPlaceBtn').addEventListener('click', () => addPendingFrom('newSubPlaceInput', pendingNew, renderPendingNew));
+    document.getElementById('newSubPlaceInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addNewSubPlaceBtn').click(); }
+    });
+
+    document.getElementById('saveSubPlacesBtn').addEventListener('click', async () => {
+      const errBox = document.getElementById('addSubPlacesError');
+      errBox.textContent = '';
+      const id = document.getElementById('subPlacesMainSelect').value;
+      if (!id || pendingNew.length === 0) { errBox.textContent = 'Select a main place and add at least one sub place.'; return; }
+
+      const btn = document.getElementById('saveSubPlacesBtn');
+      btn.disabled = true;
+      try {
+        await addSubPlacesViaApi(id, pendingNew.slice());
+        pendingNew.length = 0;
+        renderPendingNew();
+        alert('Sub places added.');
+        await loadMainPlaceOptions();
+        document.getElementById('subPlacesMainSelect').value = id;
+        document.getElementById('subPlacesMainSelect').dispatchEvent(new Event('change'));
+      } catch (err) {
+        errBox.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // ---------- Tab 3: Existing Duty Places ----------
+    const state = { search: '', page: 1, limit: 10 };
+    let currentPlaces = [];
+
+    function renderPlacesTable(res) {
+      currentPlaces = res.data;
+      const wrap = document.getElementById('dutyPlacesTableWrap');
+      if (!res.data.length) {
+        wrap.innerHTML = `<p style="color:var(--ink-500); font-size:13px;">${state.search ? 'No matching duty places found.' : 'No duty places yet. Add one from the "New Place" tab.'}</p>`;
+      } else {
+        const startSerial = (res.page - 1) * res.limit;
+        wrap.innerHTML = `
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>#</th><th>Main Place</th><th>Sub Places</th><th>Added On</th><th></th></tr></thead>
+              <tbody>
+                ${res.data.map((p, i) => `
+                  <tr data-id="${p._id}">
+                    <td class="serial-col">${startSerial + i + 1}</td>
+                    <td><b class="preserve-space">${p.mainPlace}</b></td>
+                    <td>${p.subPlaces.map(s => `<span class="chip">${s.name}</span>`).join('') || '<span style="color:var(--ink-500); font-size:12px;">No sub places</span>'}</td>
+                    <td style="white-space:nowrap; color:var(--ink-300); font-size:12.5px;">${formatDateTime(p.createdAt)}</td>
+                    <td>
+                      <div class="row-actions">
+                        <button class="add-subplace-btn" data-id="${p._id}" title="Add sub place">➕</button>
+                        <button class="edit-place-btn" data-id="${p._id}" title="Edit">✏️</button>
+                        <button class="delete-place-btn" data-id="${p._id}" title="Delete">🗑</button>
+                      </div>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+        wirePlaceRowActions();
+      }
+      const from = res.total === 0 ? 0 : (res.page - 1) * res.limit + 1;
+      const to = Math.min(res.page * res.limit, res.total);
+      document.getElementById('dutyPlacesPageInfo').textContent = `Showing ${from}-${to} of ${res.total}`;
+      document.getElementById('dutyPlacesPrevBtn').disabled = res.page <= 1;
+      document.getElementById('dutyPlacesNextBtn').disabled = res.page >= res.totalPages;
+    }
+
+    function loadExistingPlaces() {
+      document.getElementById('dutyPlacesTableWrap').innerHTML = '<p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p>';
+      fetchDutyPlacesViaApi({ search: state.search, page: state.page, limit: state.limit })
+        .then(renderPlacesTable)
+        .catch(err => {
+          document.getElementById('dutyPlacesTableWrap').innerHTML = `<p style="color:var(--danger); font-size:13px;">Could not load from MongoDB: ${err.message}</p>`;
+        });
+    }
+
+    function wirePlaceRowActions() {
+      document.querySelectorAll('.add-subplace-btn').forEach(btn => {
+        btn.addEventListener('click', () => openAddSubPlaceModal(btn.dataset.id));
+      });
+      document.querySelectorAll('.edit-place-btn').forEach(btn => {
+        btn.addEventListener('click', () => openEditPlaceModal(btn.dataset.id));
+      });
+      document.querySelectorAll('.delete-place-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const p = currentPlaces.find(r => r._id === btn.dataset.id);
+          if (!confirm(`Delete "${p ? p.mainPlace : 'this place'}" and all its sub places? This cannot be undone.`)) return;
+          try {
+            await deleteDutyPlaceViaApi(btn.dataset.id);
+            loadExistingPlaces();
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+      });
+    }
+
+    function openAddSubPlaceModal(id) {
+      const p = currentPlaces.find(r => r._id === id);
+      if (!p) return;
+      const quickPending = [];
+      openModal(`
+        <h3 class="preserve-space">Add sub places — ${p.mainPlace}</h3>
+        <div style="margin-bottom:10px;">${p.subPlaces.map(s => `<span class="chip">${s.name}</span>`).join('') || '<span style="color:var(--ink-500); font-size:12.5px;">No sub places yet</span>'}</div>
+        <div class="field" style="display:flex; gap:8px; align-items:flex-end;">
+          <div style="flex:1;"><label style="display:block; font-size:12.5px; color:var(--ink-300); margin-bottom:6px;">New sub place</label><input id="quickSubPlaceInput" placeholder="e.g. Gate D" /></div>
+          <button class="btn btn-outline" type="button" id="quickAddBtn">+</button>
+        </div>
+        <div id="quickNewChips" style="margin:10px 0;"></div>
+        <div class="error-text" id="quickAddError"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="quickCancelBtn">Cancel</button>
+          <button type="button" class="btn btn-primary" id="quickSaveBtn" style="width:auto; padding:10px 20px;">Add</button>
+        </div>
+      `);
+      const renderQuick = () => renderPendingChips('quickNewChips', quickPending, renderQuick);
+      document.getElementById('quickAddBtn').addEventListener('click', () => addPendingFrom('quickSubPlaceInput', quickPending, renderQuick));
+      document.getElementById('quickSubPlaceInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('quickAddBtn').click(); }
+      });
+      document.getElementById('quickCancelBtn').addEventListener('click', closeModal);
+      document.getElementById('quickSaveBtn').addEventListener('click', async () => {
+        const errBox = document.getElementById('quickAddError');
+        if (quickPending.length === 0) { errBox.textContent = 'Add at least one sub place.'; return; }
+        const btn = document.getElementById('quickSaveBtn');
+        btn.disabled = true;
+        try {
+          await addSubPlacesViaApi(id, quickPending.slice());
+          closeModal();
+          loadExistingPlaces();
+        } catch (err) {
+          errBox.textContent = err.message;
+          btn.disabled = false;
+        }
+      });
+    }
+
+    function openEditPlaceModal(id) {
+      const p = currentPlaces.find(r => r._id === id);
+      if (!p) return;
+      const names = p.subPlaces.map(s => s.name);
+      openModal(`
+        <h3>Edit duty place</h3>
+        <div class="field"><label>Main place</label><input id="editMainPlaceInput" value="${p.mainPlace}" /></div>
+        <div class="field">
+          <label style="display:block; font-size:12.5px; color:var(--ink-300); margin-bottom:6px;">Sub places</label>
+          <div id="editSubPlaceRows"></div>
+        </div>
+        <div class="field" style="display:flex; gap:8px; align-items:flex-end;">
+          <div style="flex:1;"><input id="editNewSubPlaceInput" placeholder="Add another sub place" /></div>
+          <button class="btn btn-outline" type="button" id="editAddSubPlaceBtn">+</button>
+        </div>
+        <div class="error-text" id="editPlaceError"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="editCancelBtn">Cancel</button>
+          <button type="button" class="btn btn-primary" id="editSaveBtn" style="width:auto; padding:10px 20px;">Save Changes</button>
+        </div>
+      `);
+      const rowsBox = document.getElementById('editSubPlaceRows');
+      const renderRows = () => {
+        rowsBox.innerHTML = names.length ? names.map((n, i) => `
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+            <input class="edit-subplace-name" data-i="${i}" value="${n}" style="flex:1;" />
+            <button type="button" class="icon-btn edit-subplace-remove" data-i="${i}">✕</button>
+          </div>`).join('') : '<p style="color:var(--ink-500); font-size:12.5px;">No sub places — add one below.</p>';
+        rowsBox.querySelectorAll('.edit-subplace-name').forEach(inp => {
+          inp.addEventListener('input', (e) => { names[parseInt(e.target.dataset.i, 10)] = e.target.value; });
+        });
+        rowsBox.querySelectorAll('.edit-subplace-remove').forEach(btn => {
+          btn.addEventListener('click', () => { names.splice(parseInt(btn.dataset.i, 10), 1); renderRows(); });
+        });
+      };
+      renderRows();
+
+      document.getElementById('editAddSubPlaceBtn').addEventListener('click', () => {
+        const input = document.getElementById('editNewSubPlaceInput');
+        const val = input.value.trim();
+        if (val) { names.push(val); input.value = ''; renderRows(); }
+      });
+      document.getElementById('editNewSubPlaceInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('editAddSubPlaceBtn').click(); }
+      });
+      document.getElementById('editCancelBtn').addEventListener('click', closeModal);
+      document.getElementById('editSaveBtn').addEventListener('click', async () => {
+        const errBox = document.getElementById('editPlaceError');
+        const mainPlace = document.getElementById('editMainPlaceInput').value.trim();
+        const cleanNames = names.map(n => n.trim()).filter(Boolean);
+        if (!mainPlace || cleanNames.length === 0) { errBox.textContent = 'Main place and at least one sub place are required.'; return; }
+        const btn = document.getElementById('editSaveBtn');
+        btn.disabled = true;
+        try {
+          await updateDutyPlaceViaApi(id, { mainPlace, subPlaces: cleanNames });
+          closeModal();
+          loadExistingPlaces();
+        } catch (err) {
+          errBox.textContent = err.message;
+          btn.disabled = false;
+        }
+      });
+    }
+
+    let dutyPlaceSearchTimer;
+    document.getElementById('dutyPlaceSearchInput').addEventListener('input', (e) => {
+      clearTimeout(dutyPlaceSearchTimer);
+      dutyPlaceSearchTimer = setTimeout(() => {
+        state.search = e.target.value.trim();
+        state.page = 1;
+        loadExistingPlaces();
+      }, 300);
+    });
+    document.getElementById('dutyPlacePageSizeSelect').addEventListener('change', (e) => {
+      state.limit = parseInt(e.target.value, 10) || 10;
+      state.page = 1;
+      loadExistingPlaces();
+    });
+    document.getElementById('dutyPlacesPrevBtn').addEventListener('click', () => { if (state.page > 1) { state.page -= 1; loadExistingPlaces(); } });
+    document.getElementById('dutyPlacesNextBtn').addEventListener('click', () => { state.page += 1; loadExistingPlaces(); });
+
+    document.getElementById('downloadDutyPlacesBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('downloadDutyPlacesBtn');
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Preparing...';
+      try {
+        const res = await fetchDutyPlacesViaApi({ search: state.search, page: 1, limit: 10000 });
+        const rows = [];
+        res.data.forEach(p => {
+          if (!p.subPlaces.length) {
+            rows.push({ 'Main Place': p.mainPlace, 'Sub Place': '', 'Added On': formatDateTime(p.createdAt) });
+          } else {
+            p.subPlaces.forEach(s => rows.push({
+              'Main Place': p.mainPlace,
+              'Sub Place': s.name,
+              'Added On': formatDateTime(p.createdAt),
+            }));
+          }
+        });
+        exportRowsToExcel(rows, { filename: `duty_places_${Date.now()}.xlsx`, sheetName: 'Duty Places' });
+      } catch (err) {
+        alert('Could not export: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
     });
   }
 

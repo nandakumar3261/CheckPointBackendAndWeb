@@ -394,7 +394,12 @@ tr:last-child td { border-bottom: none; }
   font-size: 11.5px;
   color: var(--ink-300);
   margin: 3px 4px 3px 0;
+  white-space: pre-wrap; /* keep multiple spaces inside a name visible instead of HTML collapsing them */
 }
+
+/* Applied to any text pulled straight from the database (place/sub-place
+   names) so runs of spaces the admin typed are shown exactly as entered. */
+.preserve-space { white-space: pre-wrap; }
 
 .progress-track {
   height: 7px;
@@ -497,6 +502,9 @@ tr:last-child td { border-bottom: none; }
 .data-toolbar .search-field input:focus { outline: none; border-color: var(--amber); }
 .data-toolbar .page-size-field { display: flex; align-items: center; gap: 8px; }
 .data-toolbar .page-size-field label { font-size: 12.5px; color: var(--ink-500); white-space: nowrap; }
+/* Groups the page-size control and a download/action button together on
+   the right-hand side of a data-toolbar, e.g. Existing Duty Places. */
+.data-toolbar .toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .data-toolbar select {
   padding: 9px 12px;
   border-radius: var(--radius);
@@ -521,6 +529,33 @@ tr:last-child td { border-bottom: none; }
 .pagination-bar .page-controls { display: flex; gap: 8px; }
 
 .serial-col { color: var(--ink-500); width: 40px; }
+
+/* ---------- Tabs (used by Add Duty Places) ---------- */
+.tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--navy-line);
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--ink-500);
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: var(--ink-100); }
+.tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
+
+/* Small "x" inside a pending chip, to remove it before saving */
+.chip-remove { color: var(--ink-500); font-weight: 700; }
+.chip-remove:hover { color: var(--danger); }
 
 /* ---------- Add Security: CSV bulk upload ---------- */
 .bulk-upload-box {

@@ -1,10 +1,11 @@
 /**
  * MOCK holds static data for everything that is NOT yet wired to MongoDB
- * (duty places, assignments, QR scans, uploaded images, duty status).
+ * (assignments, QR scans, uploaded images, duty status).
  *
- * Login and user/guard management now go through the real backend API
- * (see api.js) which is backed by a local MongoDB instance - see
- * findUserViaApi() / addUserViaApi() / fetchUsersViaApi() in api.js.
+ * Login, user/guard management, and duty places now go through the real
+ * backend API (see api.js) which is backed by a local MongoDB instance -
+ * see findUserViaApi() / addUserViaApi() / fetchUsersViaApi() and
+ * fetchDutyPlacesViaApi() / addDutyPlaceViaApi() etc. in api.js.
  */
 
 const MOCK = {
@@ -18,6 +19,10 @@ const MOCK = {
     { empId: '3220', name: 'Mahesh Rao', mobile: '9345612780', designation: 'Security Guard' },
   ],
 
+  // Fallback list only used by the "Assign Duty" dropdown, which is still
+  // static-data driven. "Add Duty Places" / "Existing Duty Places" now read
+  // and write live MongoDB data instead of this list - see the
+  // renderers.addDutyPlaces section in admin.js.
   dutyPlaces: [
     { mainPlace: 'Aditya Towers - Main Gate', subPlaces: ['Gate A', 'Gate B', 'Reception Lobby'] },
     { mainPlace: 'Warehouse Complex', subPlaces: ['Loading Bay 1', 'Loading Bay 2', 'Perimeter Fence'] },

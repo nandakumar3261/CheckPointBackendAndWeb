@@ -80,22 +80,21 @@ Indexes: `{ empId: 1 }` unique.
 
 ## 3. `dutyplaces`
 
-A site ("main place") with an embedded array of sub-places, each carrying
-its own QR code value.
+A site ("main place") with an embedded array of sub-places.
 
 ```json
 {
   "_id": "ObjectId",
   "mainPlace": "Aditya Towers - Main Gate",
   "subPlaces": [
-    { "name": "Gate A", "qrCode": "GATEA-AT-001" },
-    { "name": "Gate B", "qrCode": "GATEB-AT-002" },
-    { "name": "Reception Lobby", "qrCode": "LOBBY-AT-003" }
+    { "name": "Gate A" },
+    { "name": "Gate B" },
+    { "name": "Reception Lobby" }
   ],
   "createdAt": "2024-01-01T09:00:00Z"
 }
 ```
-Indexes: `{ mainPlace: 1 }` unique; `{ "subPlaces.qrCode": 1 }`.
+Indexes: `{ mainPlace: 1 }` unique.
 
 ## 4. `dutyassignments`
 
