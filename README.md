@@ -224,6 +224,31 @@ If you still see this after restarting the server, check the browser's
 Network tab for the failing request and read the actual response body —
 it will now say plainly what went wrong.
 
+### Duty Status: Assign Duty / Show Assigned Duties
+
+The "Duty Status" section now covers:
+
+- **Assign Duty to Guard** — drag main places and guards into a batch, then submit.
+  - The duty date picker only allows today or later (enforced both with an
+    HTML `min` and a server-side check on submit).
+  - The Main Places and Guards columns each have their own search box.
+  - Picking a date fetches whatever is already assigned for that day from
+    MongoDB and shows it locked at the top of the Duty Assignments column
+    (green "Already assigned" cards, no remove button) — their places and
+    guards are greyed out in the two source columns so they can't be
+    double-booked. You can still drag in more duties for the same date on
+    top of what's already there.
+  - A dashed "+ Drag a main place here to add another duty" placeholder is
+    always visible at the bottom of the Duty Assignments column, even once
+    it has cards in it.
+- **Show Assigned Duties** — search, a date filter (with a "Clear date"
+  link), pagination, and a **Status** column showing Completed vs Upcoming
+  (a duty is "completed" once its date has passed). Completed duties have
+  their Edit/Delete icons disabled (both in the UI and enforced again on
+  the server) — only upcoming duties can be changed. A **Download PDF**
+  button exports whatever the current search/date filter matches, using
+  jsPDF + autotable (loaded via CDN in `admin.html`).
+
 ---
 
 ## Next steps to make this a real, connected system

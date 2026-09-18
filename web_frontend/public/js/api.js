@@ -136,3 +136,41 @@ async function deleteDutyPlaceViaApi(id) {
   const res = await fetch(`/api/duty-places/${encodeURIComponent(id)}`, { method: 'DELETE' });
   return readJsonResponse(res);
 }
+
+/**
+ * Duty assignments (see routes/dutyAssignments.js, models/DutyAssignment.js).
+ */
+
+async function fetchDutyAssignmentsViaApi({ search, date, page = 1, limit = 10 } = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (date) params.set('date', date);
+  params.set('page', page);
+  params.set('limit', limit);
+
+  const res = await fetch(`/api/duty-assignments?${params.toString()}`);
+  return readJsonResponse(res); // { data, total, page, limit, totalPages }
+}
+
+async function bulkAssignDutiesViaApi(payload) {
+  const res = await fetch('/api/duty-assignments/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return readJsonResponse(res); // { insertedCount, skippedCount, results }
+}
+
+async function updateDutyAssignmentViaApi(id, payload) {
+  const res = await fetch(`/api/duty-assignments/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return readJsonResponse(res);
+}
+
+async function deleteDutyAssignmentViaApi(id) {
+  const res = await fetch(`/api/duty-assignments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return readJsonResponse(res);
+}

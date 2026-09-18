@@ -2,12 +2,11 @@
  * Aditya Security Guard - Web app server
  *
  * Serves the static HTML/CSS/JS dashboard AND now connects to a local
- * MongoDB instance for authentication, user (admin/guard) management, and
- * duty places (main places + sub-places).
+ * MongoDB instance for authentication, user (admin/guard) management,
+ * duty places (main places + sub-places), and duty assignments.
  *
- * Everything else (assignments, QR scans, uploaded images, duty status)
- * still runs on the static mock data in public/js/data.js - only login,
- * "Add/Get Security", and "Add Duty Places" are backed by MongoDB for now.
+ * Everything else (QR scans, uploaded images, duty finished status)
+ * still runs on the static mock data in public/js/data.js.
  *
  * Ports are intentionally separate:
  *   - Web server:  PORT in .env (default 3000)
@@ -34,6 +33,7 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const dutyPlaceRoutes = require('./routes/dutyPlaces');
+const dutyAssignmentRoutes = require('./routes/dutyAssignments');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,6 +44,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/duty-places', dutyPlaceRoutes);
+app.use('/api/duty-assignments', dutyAssignmentRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: 'MongoDB (see /api/health/db for connection state)' });

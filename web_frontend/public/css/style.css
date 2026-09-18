@@ -557,6 +557,142 @@ tr:last-child td { border-bottom: none; }
 .chip-remove { color: var(--ink-500); font-weight: 700; }
 .chip-remove:hover { color: var(--danger); }
 
+/* ---------- Duty Status > Assign Duty to Guard: drag-and-drop board ---------- */
+.assign-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 900px) { .assign-board { grid-template-columns: 1fr; } }
+
+.assign-col { min-height: 320px; }
+.assign-hint { font-size: 11.5px; color: var(--ink-500); margin-bottom: 10px; }
+.assign-list { display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
+
+.assign-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  background: var(--navy-800);
+  font-size: 13px;
+  cursor: grab;
+  user-select: none;
+}
+.assign-item:active { cursor: grabbing; }
+.assign-item .idx { color: var(--ink-500); font-size: 11.5px; min-width: 18px; }
+.assign-item.used { opacity: 0.45; cursor: not-allowed; }
+
+.assign-dropzone {
+  min-height: 200px;
+  border: 1px dashed var(--navy-line);
+  border-radius: 10px;
+  padding: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.assign-dropzone.drag-over { border-color: var(--amber); background: rgba(232, 163, 61, 0.06); }
+
+.duty-mini-card {
+  position: relative;
+  border: 1px solid var(--navy-line);
+  border-radius: 10px;
+  padding: 10px 32px 10px 12px;
+  background: var(--navy-800);
+}
+.duty-mini-card .remove-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--ink-500);
+  cursor: pointer;
+  font-size: 13px;
+}
+.duty-mini-card .remove-btn:hover { color: var(--danger); }
+.duty-mini-card .mini-place { font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+.duty-mini-card .mini-guard-slot {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px dashed var(--navy-line);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink-500);
+  text-align: center;
+  transition: border-color 0.15s;
+}
+.duty-mini-card .mini-guard-slot.filled {
+  border-style: solid;
+  color: var(--ink-100);
+  text-align: left;
+  font-weight: 600;
+}
+.duty-mini-card .mini-guard-slot.drag-over { border-color: var(--amber); }
+
+/* An already-committed duty (loaded from the DB for the picked date) shown
+   in the drop zone alongside new ones being built - locked, no remove
+   button, visually distinct so it reads as "already saved". */
+.duty-mini-card.existing-duty { border-color: var(--success); background: rgba(76,175,109,0.06); }
+.duty-mini-card .existing-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--success);
+  margin-bottom: 6px;
+}
+
+/* Always-visible placeholder at the bottom of the drop zone so it's clear
+   there's room to drag in another duty, even once cards are already there. */
+.assign-dropzone-hint {
+  border: 1px dashed var(--navy-line);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-500);
+  margin-top: 8px;
+}
+
+/* Small search box above a draggable list (Main Places / Guards columns) */
+.mini-search {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--navy-line);
+  background: var(--navy-800);
+  color: var(--ink-100);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+.mini-search:focus { outline: none; border-color: var(--amber); }
+
+.badge-neutral { background: rgba(255,255,255,0.08); color: var(--ink-300); }
+
+/* Date-filter input dropped into a .data-toolbar alongside the search box */
+.data-toolbar input[type="date"] {
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--navy-line);
+  background: var(--navy-800);
+  color: var(--ink-100);
+  font-size: 13px;
+  font-family: inherit;
+}
+.data-toolbar input[type="date"]:focus { outline: none; border-color: var(--amber); }
+.clear-date-link {
+  font-size: 12px;
+  color: var(--ink-500);
+  cursor: pointer;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.clear-date-link:hover { color: var(--amber); }
+
 /* ---------- Add Security: CSV bulk upload ---------- */
 .bulk-upload-box {
   border: 1px dashed var(--navy-line);

@@ -30,6 +30,10 @@ const MOCK = {
     { mainPlace: 'Corporate Park', subPlaces: ['Block A Entrance', 'Block B Entrance', 'Cafeteria Wing'] },
   ],
 
+  // Still used by the guard-facing "My Duties" page (user.js). The admin
+  // dashboard's Duty Status tabs now read/write live MongoDB data instead
+  // via fetchDutyAssignmentsViaApi() / bulkAssignDutiesViaApi() in api.js -
+  // see the renderers.dutyStatus section in admin.js.
   assignments: [
     { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Ramesh Yadav ( 2758 )', mainPlace: 'Aditya Towers - Main Gate', subPlaces: ['Gate A', 'Gate B', 'Reception Lobby'] },
     { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Suresh Pawar ( 3049 )', mainPlace: 'Warehouse Complex', subPlaces: ['Loading Bay 1', 'Loading Bay 2', 'Perimeter Fence'] },
@@ -48,6 +52,9 @@ const MOCK = {
     { guardLabel: 'Vikram Singh ( 3105 )', place: 'Level 1', timestamp: '11-01-2024 20:02:44' },
   ],
 
+  // Used by the admin dashboard's "Duty Finished Status" tab (still a
+  // placeholder - see renderers.dutyStatus in admin.js) and the guard-facing
+  // duty-status views.
   dutyStatus: [
     { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Ramesh Yadav ( 2758 )', place: 'Aditya Towers - Main Gate', total: 3, scanned: 2 },
     { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Suresh Pawar ( 3049 )', place: 'Warehouse Complex', total: 3, scanned: 1 },
