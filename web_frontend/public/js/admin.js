@@ -246,6 +246,7 @@ const renderers = {
       <button class="tab-btn active" data-tab="newPlace" type="button">New Place</button>
       <button class="tab-btn" data-tab="addSubPlaces" type="button">Add Sub Places</button>
       <button class="tab-btn" data-tab="existingPlaces" type="button">Existing Duty Places</button>
+      <button class="tab-btn" data-tab="generateQr" type="button">Generate QR Code</button>
     </div>
 
     <div class="tab-panel" id="tab-newPlace">
@@ -310,6 +311,27 @@ const renderers = {
             <button class="btn btn-outline" id="dutyPlacesNextBtn" style="padding:8px 16px;">Next</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-generateQr" style="display:none;">
+      <div class="card" style="max-width:480px;">
+        <div class="card-title">Generate a QR code for a sub place</div>
+        <div class="field">
+          <label>Main place</label>
+          <select id="qrMainPlaceSelect"><option value="">Select a main place</option></select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Sub place</label>
+          <select id="qrSubPlaceSelect" disabled><option value="">Select a main place first</option></select>
+        </div>
+        <div class="error-text" id="qrGenerateError"></div>
+      </div>
+
+      <div class="card" id="qrPreviewCard" style="max-width:420px; display:none; text-align:center;">
+        <div class="card-title" style="text-align:left;">Preview</div>
+        <div id="qrPreviewWrap" style="display:flex; flex-direction:column; align-items:center; gap:10px;"></div>
+        <button class="btn btn-primary" id="downloadQrPdfBtn" type="button" style="width:auto; padding:10px 22px; margin-top:18px;" disabled>⬇ Download as PDF</button>
       </div>
     </div>
   `,
@@ -737,7 +759,7 @@ function attachHandlers(section) {
 
   if (section === 'addDutyPlaces') {
     // ---------- Tab switching ----------
-    const tabNames = ['newPlace', 'addSubPlaces', 'existingPlaces'];
+    const tabNames = ['newPlace', 'addSubPlaces', 'existingPlaces', 'generateQr'];
     document.querySelectorAll('#dutyPlaceTabs .tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('#dutyPlaceTabs .tab-btn').forEach(b => b.classList.remove('active'));
@@ -747,6 +769,7 @@ function attachHandlers(section) {
         });
         if (btn.dataset.tab === 'addSubPlaces') loadMainPlaceOptions();
         if (btn.dataset.tab === 'existingPlaces') loadExistingPlaces();
+        if (btn.dataset.tab === 'generateQr') loadQrMainPlaceOptions();
       });
     });
 
@@ -1095,6 +1118,108 @@ function attachHandlers(section) {
         btn.disabled = false;
         btn.textContent = originalLabel;
       }
+    });
+
+    // ---------- Tab 4: Generate QR Code ----------
+    let qrPlaceOptions = [];
+    let currentQrDataUrl = null;
+    let currentQrCaption = { subPlace: '' };
+
+    function resetQrPreview() {
+      document.getElementById('qrPreviewCard').style.display = 'none';
+      document.getElementById('qrPreviewWrap').innerHTML = '';
+      document.getElementById('downloadQrPdfBtn').disabled = true;
+      currentQrDataUrl = null;
+    }
+
+    async function loadQrMainPlaceOptions() {
+      const select = document.getElementById('qrMainPlaceSelect');
+      const previous = select.value;
+      select.innerHTML = '<option value="">Loading...</option>';
+      try {
+        const res = await fetchDutyPlaceOptionsViaApi();
+        qrPlaceOptions = res.data;
+        select.innerHTML = '<option value="">Select a main place</option>' +
+          qrPlaceOptions.map(p => `<option value="${p._id}">${p.mainPlace}</option>`).join('');
+        if (previous && qrPlaceOptions.some(p => p._id === previous)) {
+          select.value = previous;
+          select.dispatchEvent(new Event('change'));
+        } else {
+          document.getElementById('qrSubPlaceSelect').innerHTML = '<option value="">Select a main place first</option>';
+          document.getElementById('qrSubPlaceSelect').disabled = true;
+          resetQrPreview();
+        }
+      } catch (err) {
+        select.innerHTML = '<option value="">Could not load places</option>';
+      }
+    }
+
+    document.getElementById('qrMainPlaceSelect').addEventListener('change', (e) => {
+      document.getElementById('qrGenerateError').textContent = '';
+      resetQrPreview();
+      const subSelect = document.getElementById('qrSubPlaceSelect');
+      const place = qrPlaceOptions.find(p => p._id === e.target.value);
+
+      if (!place) {
+        subSelect.innerHTML = '<option value="">Select a main place first</option>';
+        subSelect.disabled = true;
+        return;
+      }
+      if (!place.subPlaces.length) {
+        subSelect.innerHTML = '<option value="">No sub places for this main place</option>';
+        subSelect.disabled = true;
+        return;
+      }
+      subSelect.innerHTML = '<option value="">Select a sub place</option>' +
+        place.subPlaces.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
+      subSelect.disabled = false;
+    });
+
+    document.getElementById('qrSubPlaceSelect').addEventListener('change', async (e) => {
+      const errBox = document.getElementById('qrGenerateError');
+      errBox.textContent = '';
+      resetQrPreview();
+
+      const place = qrPlaceOptions.find(p => p._id === document.getElementById('qrMainPlaceSelect').value);
+      const idx = e.target.value;
+      if (!place || idx === '') return;
+      const subPlace = place.subPlaces[parseInt(idx, 10)];
+      if (!subPlace) return;
+
+      const previewCard = document.getElementById('qrPreviewCard');
+      const previewWrap = document.getElementById('qrPreviewWrap');
+      previewCard.style.display = 'block';
+      previewWrap.innerHTML = '<p style="color:var(--ink-500); font-size:13px;">Generating...</p>';
+
+      try {
+        const logoImg = await loadImageAsync('images/logo.png');
+        // Requirement: the QR only needs the sub place - the raw name exactly
+        // as stored (spaces included), with no main place mixed in.
+        const canvas = generateQrCanvas(subPlace.name, logoImg);
+        const dataUrl = canvas.toDataURL('image/png');
+
+        currentQrDataUrl = dataUrl;
+        currentQrCaption = { subPlace: subPlace.name };
+
+        previewWrap.innerHTML = `
+          <div class="qr-frame"><img src="${dataUrl}" alt="QR code" style="display:block; width:220px; height:220px;" /></div>
+          <div class="preserve-space" style="font-size:16px; font-weight:700;">${subPlace.name}</div>
+        `;
+        document.getElementById('downloadQrPdfBtn').disabled = false;
+      } catch (err) {
+        errBox.textContent = err.message;
+        previewCard.style.display = 'none';
+      }
+    });
+
+    document.getElementById('downloadQrPdfBtn').addEventListener('click', () => {
+      if (!currentQrDataUrl) return;
+      const safeName = currentQrCaption.subPlace.trim().replace(/[^\w\-]+/g, '_') || 'qr_code';
+      exportQrCodeToPdf({
+        dataUrl: currentQrDataUrl,
+        caption: currentQrCaption.subPlace,
+        filename: `${safeName}.pdf`,
+      });
     });
   }
 

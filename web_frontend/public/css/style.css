@@ -553,6 +553,16 @@ tr:last-child td { border-bottom: none; }
 .tab-btn:hover { color: var(--ink-100); }
 .tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
 
+/* Printed-card look for the Generate QR Code preview: a rounded black
+   frame around the QR image, matching the physical signage cards. */
+.qr-frame {
+  display: inline-block;
+  padding: 16px;
+  border: 4px solid #0f0f0f;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
 /* Small "x" inside a pending chip, to remove it before saving */
 .chip-remove { color: var(--ink-500); font-weight: 700; }
 .chip-remove:hover { color: var(--danger); }
