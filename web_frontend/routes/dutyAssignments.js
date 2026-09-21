@@ -39,6 +39,17 @@ function dayBoundsUTC(dateStr) {
   return { start, end };
 }
 
+// "completed" / "today" / "upcoming" for a dutyDate, using the same UTC-day
+// rule as isCompleted() below (a duty is completed once its dutyDate is
+// strictly before today). Used by the guard dashboard.
+function dutyStatus(dutyDate) {
+  const bounds = dayBoundsUTC(new Date().toISOString().slice(0, 10));
+  const d = new Date(dutyDate);
+  if (d < bounds.start) return 'completed';
+  if (d < bounds.end) return 'today';
+  return 'upcoming';
+}
+
 // GET /api/duty-assignments?search=&date=&page=1&limit=10
 //   search - optional, matches guard name, main place, or any sub-place
 //   date   - optional, "YYYY-MM-DD"; restricts to assignments whose dutyDate
@@ -75,6 +86,32 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error fetching duty assignments.' });
+  }
+});
+
+// GET /api/duty-assignments/mine?guardEmpId=2758
+// Powers the guard dashboard (Home + My Duties). Returns ONLY the duties whose
+// guardEmpId exactly equals the given roll number (the admin's "Assign Duty"
+// screen stores the guard's roll_no there), oldest date first, each tagged
+// with status: 'completed' | 'today' | 'upcoming'.
+// Exact match on purpose - the admin list's `search` is a partial regex match,
+// so "27" would also match guard "2758".
+router.get('/mine', async (req, res) => {
+  try {
+    // typeof check: Express parses ?guardEmpId[$ne]=x into an object, which
+    // would otherwise be passed straight into the Mongo query.
+    const guardEmpId = typeof req.query.guardEmpId === 'string' ? req.query.guardEmpId.trim() : '';
+    if (!guardEmpId) {
+      return res.status(400).json({ error: 'guardEmpId is required.' });
+    }
+
+    const docs = await DutyAssignment.find({ guardEmpId }).sort({ dutyDate: 1 }).lean();
+    const data = docs.map((d) => ({ ...d, status: dutyStatus(d.dutyDate) }));
+
+    res.json({ data, total: data.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching your duties.' });
   }
 });
 

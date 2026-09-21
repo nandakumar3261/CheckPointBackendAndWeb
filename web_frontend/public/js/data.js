@@ -1,11 +1,12 @@
 /**
  * MOCK holds static data for everything that is NOT yet wired to MongoDB
- * (assignments, QR scans, uploaded images, duty status).
+ * (QR scans, uploaded images, duty status).
  *
- * Login, user/guard management, and duty places now go through the real
- * backend API (see api.js) which is backed by a local MongoDB instance -
- * see findUserViaApi() / addUserViaApi() / fetchUsersViaApi() and
- * fetchDutyPlacesViaApi() / addDutyPlaceViaApi() etc. in api.js.
+ * Login, user/guard management, duty places and duty assignments (admin
+ * Assign Duty screens AND the guard's Home / My Duties pages) now go through
+ * the real backend API (see api.js) which is backed by MongoDB - see
+ * loginViaApi() / fetchUsersViaApi() / fetchDutyPlacesViaApi() /
+ * fetchDutyAssignmentsViaApi() / fetchMyDutiesViaApi() etc. in api.js.
  */
 
 const MOCK = {
@@ -28,16 +29,6 @@ const MOCK = {
     { mainPlace: 'Warehouse Complex', subPlaces: ['Loading Bay 1', 'Loading Bay 2', 'Perimeter Fence'] },
     { mainPlace: 'Parking Structure', subPlaces: ['Level 1', 'Level 2', 'Rooftop'] },
     { mainPlace: 'Corporate Park', subPlaces: ['Block A Entrance', 'Block B Entrance', 'Cafeteria Wing'] },
-  ],
-
-  // Still used by the guard-facing "My Duties" page (user.js). The admin
-  // dashboard's Duty Status tabs now read/write live MongoDB data instead
-  // via fetchDutyAssignmentsViaApi() / bulkAssignDutiesViaApi() in api.js -
-  // see the renderers.dutyStatus section in admin.js.
-  assignments: [
-    { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Ramesh Yadav ( 2758 )', mainPlace: 'Aditya Towers - Main Gate', subPlaces: ['Gate A', 'Gate B', 'Reception Lobby'] },
-    { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Suresh Pawar ( 3049 )', mainPlace: 'Warehouse Complex', subPlaces: ['Loading Bay 1', 'Loading Bay 2', 'Perimeter Fence'] },
-    { dateRange: '11-01-2024_12-01-2024', guardLabel: 'Vikram Singh ( 3105 )', mainPlace: 'Parking Structure', subPlaces: ['Level 1', 'Level 2', 'Rooftop'] },
   ],
 
   scans: [

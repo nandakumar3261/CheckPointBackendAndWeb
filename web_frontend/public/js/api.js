@@ -174,3 +174,14 @@ async function deleteDutyAssignmentViaApi(id) {
   const res = await fetch(`/api/duty-assignments/${encodeURIComponent(id)}`, { method: 'DELETE' });
   return readJsonResponse(res);
 }
+
+/**
+ * The logged-in guard's own duties (see GET /api/duty-assignments/mine).
+ * Only assignments whose guardEmpId equals this roll number are returned,
+ * each tagged with status: 'completed' | 'today' | 'upcoming'.
+ */
+async function fetchMyDutiesViaApi(guardEmpId) {
+  const params = new URLSearchParams({ guardEmpId });
+  const res = await fetch(`/api/duty-assignments/mine?${params.toString()}`);
+  return readJsonResponse(res); // { data, total }
+}

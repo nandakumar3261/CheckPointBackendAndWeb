@@ -52,8 +52,9 @@ mongoose.connect('mongodb://localhost:27017/security_guard_db');
 ## 3. Web frontend + backend — `web_frontend/`
 
 This is connected to MongoDB for authentication and user/guard management.
-Everything else (duty places, assignments, QR scans, uploaded images, duty
-status) still uses the static mock data in `public/js/data.js`.
+Duty places and duty assignments (admin screens and the guard's Home / My Duties
+pages) are also live. QR scans, uploaded images and the duty-finished status
+tab still use the static mock data in `public/js/data.js`.
 
 It works with either a **local MongoDB** or a **MongoDB Atlas** (cloud)
 cluster — same code either way, just a different `MONGO_URI` in `.env`.
@@ -88,8 +89,8 @@ password-protected, or just run plain `mongod` if not).
 
 There's no seed script with credentials baked into a file. Instead, you
 create the very first admin account yourself, directly in the MongoDB
-shell — then log in as that admin and use the **"Add Security"** page in
-the web app for every account after that.
+shell — then log in as that admin and use the **"Add Security"** tab (inside
+**"Security Data"**) in the web app for every account after that.
 
 ```bash
 # 1. Generate a bcrypt hash for the password you want this admin to use
@@ -118,9 +119,9 @@ Now start the app:
 npm start
 ```
 Open `http://localhost:3000` and log in with the roll number/password you
-just chose. From there, use the sidebar's **"Add Security"** page to
-create every other admin or guard account — no more manual shell work
-needed after this one-time step.
+just chose. From there, use **Security Data → Add Security** to create
+every other admin or guard account — no more manual shell work needed
+after this one-time step.
 
 ### Securing local MongoDB with an admin user
 
@@ -178,8 +179,9 @@ passwords directly.
 - `server.js` — Express server; connects to MongoDB on startup via `config/db.js`, then mounts:
   - `POST /api/auth/login` — checks roll_no/password against MongoDB, and rejects blocked accounts
   - `GET /api/users?role=&search=&page=&limit=` — paginated, searchable list of accounts (search matches name, roll no, mobile, **and designation**)
-  - `POST /api/users` — create a single account (used by "Add Security")
-  - `POST /api/users/bulk` — create many accounts from a parsed CSV (used by "Add Security" bulk upload); returns a per-row `inserted`/`skipped` summary so bad rows don't block good ones
+  - `GET /api/users/by-roll/:roll_no` — one account by exact roll number (no password hash); used by the Flutter app's Profile screen
+  - `POST /api/users` — create a single account (used by the "Add Security" tab)
+  - `POST /api/users/bulk` — create many accounts from a parsed CSV (used by the "Add Security" tab's bulk upload); returns a per-row `inserted`/`skipped` summary so bad rows don't block good ones
   - `PUT /api/users/:id` — edit an account's name, designation, mobile, role, and optionally its password (roll_no stays fixed as the login key)
   - `PATCH /api/users/:id/toggle-block` — block or unblock an account
   - `DELETE /api/users/:id` — permanently remove an account
@@ -189,14 +191,15 @@ passwords directly.
 - `public/js/api.js` — thin `fetch()` wrapper the frontend uses to talk to the API above
 - `public/index.html` — login page (asks for Roll No + Password), calls `POST /api/auth/login`
 - `public/admin.html` + `public/js/admin.js` — admin dashboard:
-  - **"Add Security"** — single-account form plus a **bulk CSV upload**: download a template, fill it in, upload it, and see which rows were inserted vs. skipped (with reasons)
-  - **"Get Security Data"** — reads live from MongoDB with a **search box** (name / roll no / mobile / designation), a **rows-per-page dropdown** (10/20/50/100), a **serial number column**, **Previous/Next** pagination, a **Status** column (Active/Blocked), and per-row **✏️ Edit / 🚫 Block / 🗑 Delete** actions on the right. Edit opens a small modal; Block and Delete ask for confirmation first.
+  - **"Security Data"** (one sidebar item, two tabs):
+    - **Add Security** tab — single-account form plus a **bulk CSV upload**: download a template, fill it in, upload it, and see which rows were inserted vs. skipped (with reasons)
+    - **Security Information** tab — reads live from MongoDB with a **search box** (name / roll no / mobile / designation), a **rows-per-page dropdown** (10/20/50/100), a **serial number column**, **Previous/Next** pagination, a **Status** column (Active/Blocked), and per-row **✏️ Edit / 🚫 Block / 🗑 Delete** actions on the right. Edit opens a small modal; Block and Delete ask for confirmation first.
   - The sidebar (including the Logout button) now stays pinned to the viewport regardless of how tall the table gets — it no longer drifts down the page as more rows are shown
   - The other 12 sections are unchanged (static mock data)
-- `public/user.html` + `public/js/user.js` — guard dashboard, unchanged aside from checking for role `"security"` to match the real role value
+- `public/user.html` + `public/js/user.js` — guard dashboard. **Home** and **My Duties** now read the logged-in guard's real duty assignments from MongoDB (see "Guard dashboard: live duties" below); QR scan history, image upload and the simulated scan button still use mock data
 - `public/css/style.css` — shared theme (Big Shoulders Display for headings, Inter for body)
 
-**CSV bulk upload format** (also downloadable as a template from the "Add Security" page):
+**CSV bulk upload format** (also downloadable as a template from the "Add Security" tab):
 ```csv
 roll_no,password,first_name,designation,mobile,role
 1001,Pass@123,John Doe,Security Guard,9000000000,security
@@ -224,9 +227,11 @@ If you still see this after restarting the server, check the browser's
 Network tab for the failing request and read the actual response body —
 it will now say plainly what went wrong.
 
-### Duty Status: Assign Duty / Show Assigned Duties
+### Assign Duty: Assign Duty / Show Assigned Duties
 
-The "Duty Status" section now covers:
+The "Assign Duty" sidebar section (internally still called `dutyStatus`) has
+three tabs — "Assign Duty to Guard", "Show Assigned Duties", and "Duty
+Finished Status":
 
 - **Assign Duty to Guard** — drag main places and guards into a batch, then submit.
   - The duty date picker only allows today or later (enforced both with an
@@ -248,6 +253,41 @@ The "Duty Status" section now covers:
   the server) — only upcoming duties can be changed. A **Download PDF**
   button exports whatever the current search/date filter matches, using
   jsPDF + autotable (loaded via CDN in `admin.html`).
+
+### Flutter app (`check_point`)
+
+The mobile app calls this same server: `POST /api/auth/login` (role `admin` →
+admin app, `security` → guard app), `GET /api/duty-assignments/mine` (guard Home
+and My Duties), `GET /api/users/by-roll/:roll_no` (Profile) and
+`GET /api/users?role=admin` (Contact Us). It needs to reach the server over the
+network: an Android emulator uses `http://10.0.2.2:3000`; a real phone needs the
+computer's LAN address (and port 3000 open in its firewall). See the Flutter
+project's README for the `--dart-define=API_BASE_URL=...` flag.
+
+### Guard dashboard: live duties
+
+When an admin assigns a duty in **Assign Duty → Assign Duty to Guard**, it is
+saved in MongoDB with `guardEmpId` set to the guard's roll number. The guard
+dashboard reads it back from there:
+
+- `GET /api/duty-assignments/mine?guardEmpId=<roll_no>` — returns only that
+  guard's duties (exact match on the roll number, so guard `27` never sees
+  guard `2758`'s duties), oldest date first, each tagged with a `status` of
+  `completed`, `today` or `upcoming` (same "completed = date is before today"
+  rule the admin screen uses).
+- **Home** — count of scheduled duties (today + upcoming) and a card for
+  today's duty, or the next upcoming one if there's none today.
+- **My Duties** — every duty grouped as Today / Upcoming / Completed.
+- Duties are re-fetched every time the guard opens Home or My Duties, so a
+  duty assigned while the guard is already logged in appears on their next
+  visit (no re-login needed). A guard with no duties sees an empty state
+  (the old "show everyone's duties as a demo" fallback is gone), and a failed
+  request shows the error with a Retry button.
+
+**Note:** the API has no session/JWT yet (see "Next steps"), so
+`guardEmpId` is supplied by the browser. It filters correctly for normal use,
+but until real authentication is added it isn't a security boundary — anyone
+who can reach the API could request another guard's roll number.
 
 ---
 

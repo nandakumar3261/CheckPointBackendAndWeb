@@ -6,10 +6,9 @@ const titles = {
   getQrData: 'Get QR Code Data',
   uploadImages: 'Upload Images',
   getUploadedImages: 'Get Uploaded Images',
-  addSecurity: 'Add Security',
-  getSecurityData: 'Get Security Data',
-  addDutyPlaces: 'Add Duty Places',
-  dutyStatus: 'Duty Status',
+  securityData: 'Security Data',
+  addDutyPlaces: 'Duty Places',
+  dutyStatus: 'Assign Duty',
   profile: 'Update Profile Pic',
   contact: 'Contact Us',
 };
@@ -154,87 +153,94 @@ const renderers = {
     </div>
   `,
 
-  addSecurity: () => `
-    ${sectionHead('Add Security', 'Register a new account, one at a time or in bulk via CSV. Saved to MongoDB (the same "users" collection used for login).')}
-    <div class="two-col">
+  securityData: () => `
+    ${sectionHead('Security Data', 'Register new accounts and review everyone already registered, all backed by MongoDB.')}
+
+    <div class="tabs" id="securityDataTabs">
+      <button class="tab-btn active" data-tab="addSecurity" type="button">Add Security</button>
+      <button class="tab-btn" data-tab="securityInfo" type="button">Security Information</button>
+    </div>
+
+    <div class="tab-panel" id="tab-addSecurity">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">New account</div>
+          <form id="addGuardForm">
+            <div class="form-grid">
+              <div class="field"><label>Full name</label><input required name="first_name" /></div>
+              <div class="field"><label>Roll No</label><input required name="roll_no" /></div>
+              <div class="field"><label>Password</label><input required type="text" name="password" /></div>
+              <div class="field">
+                <label>Role</label>
+                <select name="role" required>
+                  <option value="security" selected>Security Guard</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="field"><label>Mobile</label><input required name="mobile" /></div>
+              <div class="field"><label>Designation</label><input name="designation" placeholder="Security Guard" /></div>
+            </div>
+            <div class="error-text" id="addGuardError" style="margin-bottom:10px;"></div>
+            <button class="btn btn-primary" style="width:auto; padding:10px 22px;" type="submit">Add Account</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-title">Added this session</div>
+          <div id="addedGuardsList"><p style="color:var(--ink-500); font-size:13px;">None yet</p></div>
+        </div>
+      </div>
+
       <div class="card">
-        <div class="card-title">New account</div>
-        <form id="addGuardForm">
-          <div class="form-grid">
-            <div class="field"><label>Full name</label><input required name="first_name" /></div>
-            <div class="field"><label>Roll No</label><input required name="roll_no" /></div>
-            <div class="field"><label>Password</label><input required type="text" name="password" /></div>
-            <div class="field">
-              <label>Role</label>
-              <select name="role" required>
-                <option value="security" selected>Security Guard</option>
-                <option value="admin">Admin</option>
+        <div class="card-title">Bulk upload (CSV)</div>
+        <p style="color:var(--ink-500); font-size:12.5px; margin-bottom:4px;">
+          Columns: <code>roll_no, password, first_name, designation, mobile, role</code> — role must be
+          <code>admin</code> or <code>security</code>. First row must be the header row.
+        </p>
+        <div class="bulk-upload-box">
+          <div class="row">
+            <button class="btn btn-outline" id="downloadTemplateBtn" type="button">Download CSV Template</button>
+            <input type="file" id="csvFileInput" accept=".csv,text/csv" />
+            <button class="btn btn-primary" id="uploadCsvBtn" type="button" style="width:auto; padding:10px 18px;" disabled>Upload CSV</button>
+          </div>
+          <div id="bulkUploadStatus" style="margin-top:10px; font-size:12.5px; color:var(--ink-500);"></div>
+          <div id="bulkResultList" class="bulk-result-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-securityInfo" style="display:none;">
+      <div class="card">
+        <div class="data-toolbar">
+          <div class="search-field">
+            <input type="text" id="securitySearchInput" placeholder="Search by name, roll no, mobile, or designation..." />
+          </div>
+          <div class="toolbar-right">
+            <div class="page-size-field">
+              <label for="securityPageSizeSelect">Rows per page</label>
+              <select id="securityPageSizeSelect">
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
               </select>
             </div>
-            <div class="field"><label>Mobile</label><input required name="mobile" /></div>
-            <div class="field"><label>Designation</label><input name="designation" placeholder="Security Guard" /></div>
+            <button class="btn btn-outline" id="downloadSecurityBtn" type="button">⬇ Download Excel</button>
           </div>
-          <div class="error-text" id="addGuardError" style="margin-bottom:10px;"></div>
-          <button class="btn btn-primary" style="width:auto; padding:10px 22px;" type="submit">Add Account</button>
-        </form>
-      </div>
-      <div class="card">
-        <div class="card-title">Added this session</div>
-        <div id="addedGuardsList"><p style="color:var(--ink-500); font-size:13px;">None yet</p></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Bulk upload (CSV)</div>
-      <p style="color:var(--ink-500); font-size:12.5px; margin-bottom:4px;">
-        Columns: <code>roll_no, password, first_name, designation, mobile, role</code> — role must be
-        <code>admin</code> or <code>security</code>. First row must be the header row.
-      </p>
-      <div class="bulk-upload-box">
-        <div class="row">
-          <button class="btn btn-outline" id="downloadTemplateBtn" type="button">Download CSV Template</button>
-          <input type="file" id="csvFileInput" accept=".csv,text/csv" />
-          <button class="btn btn-primary" id="uploadCsvBtn" type="button" style="width:auto; padding:10px 18px;" disabled>Upload CSV</button>
         </div>
-        <div id="bulkUploadStatus" style="margin-top:10px; font-size:12.5px; color:var(--ink-500);"></div>
-        <div id="bulkResultList" class="bulk-result-list"></div>
-      </div>
-    </div>
-  `,
-
-  getSecurityData: () => `
-    ${sectionHead('Get Security Data', 'All registered accounts, read live from MongoDB.')}
-    <div class="card">
-      <div class="data-toolbar">
-        <div class="search-field">
-          <input type="text" id="securitySearchInput" placeholder="Search by name, roll no, mobile, or designation..." />
-        </div>
-        <div class="toolbar-right">
-          <div class="page-size-field">
-            <label for="securityPageSizeSelect">Rows per page</label>
-            <select id="securityPageSizeSelect">
-              <option value="10" selected>10</option>
-              <option value="20">20</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-            </select>
+        <div id="securityDataTableWrap"><p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p></div>
+        <div class="pagination-bar">
+          <div class="page-info" id="securityPageInfo"></div>
+          <div class="page-controls">
+            <button class="btn btn-outline" id="securityPrevBtn" style="padding:8px 16px;" disabled>Previous</button>
+            <button class="btn btn-outline" id="securityNextBtn" style="padding:8px 16px;">Next</button>
           </div>
-          <button class="btn btn-outline" id="downloadSecurityBtn" type="button">⬇ Download Excel</button>
-        </div>
-      </div>
-      <div id="securityDataTableWrap"><p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p></div>
-      <div class="pagination-bar">
-        <div class="page-info" id="securityPageInfo"></div>
-        <div class="page-controls">
-          <button class="btn btn-outline" id="securityPrevBtn" style="padding:8px 16px;" disabled>Previous</button>
-          <button class="btn btn-outline" id="securityNextBtn" style="padding:8px 16px;">Next</button>
         </div>
       </div>
     </div>
   `,
 
   addDutyPlaces: () => `
-    ${sectionHead('Add Duty Places', 'A main place (site) contains one or more sub-places, each with its own QR code.')}
+    ${sectionHead('Duty Places', 'A main place (site) contains one or more sub-places, each with its own QR code.')}
 
     <div class="tabs" id="dutyPlaceTabs">
       <button class="tab-btn active" data-tab="newPlace" type="button">New Place</button>
@@ -309,7 +315,7 @@ const renderers = {
   `,
 
   dutyStatus: () => `
-    ${sectionHead('Duty Status', 'Assign duty to guards, review what is scheduled, and track completion.')}
+    ${sectionHead('Assign Duty', 'Assign duty to guards, review what is scheduled, and track completion.')}
 
     <div class="tabs" id="dutyStatusTabs">
       <button class="tab-btn active" data-tab="assignDuty" type="button">Assign Duty to Guard</button>
@@ -447,7 +453,22 @@ function attachHandlers(section) {
     document.getElementById('uploadImgBtn').addEventListener('click', () => alert('Image uploaded (simulated)'));
   }
 
-  if (section === 'addSecurity') {
+  if (section === 'securityData') {
+    // ---------- Tab switching ----------
+    const sdTabNames = ['addSecurity', 'securityInfo'];
+    document.querySelectorAll('#securityDataTabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#securityDataTabs .tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        sdTabNames.forEach(t => {
+          document.getElementById('tab-' + t).style.display = (t === btn.dataset.tab) ? 'block' : 'none';
+        });
+      });
+    });
+
+    // ======================================================================
+    // Tab: Add Security (single account form + CSV bulk upload)
+    // ======================================================================
     const added = [];
     document.getElementById('addGuardForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -523,9 +544,10 @@ function attachHandlers(section) {
       };
       reader.readAsText(selectedFile);
     });
-  }
 
-  if (section === 'getSecurityData') {
+    // ======================================================================
+    // Tab: Security Information (search + pagination + edit/block/delete)
+    // ======================================================================
     const state = { search: '', page: 1, limit: 10 };
     let currentRows = []; // cache of the currently-rendered page, for the edit modal
 
@@ -580,10 +602,10 @@ function attachHandlers(section) {
     };
 
     function wireRowActions() {
-      document.querySelectorAll('.edit-btn').forEach(btn => {
+      document.querySelectorAll('#tab-securityInfo .edit-btn').forEach(btn => {
         btn.addEventListener('click', () => openEditModal(btn.dataset.id));
       });
-      document.querySelectorAll('.block-btn, .unblock-btn').forEach(btn => {
+      document.querySelectorAll('#tab-securityInfo .block-btn, #tab-securityInfo .unblock-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
           const u = currentRows.find(r => r._id === btn.dataset.id);
           const verb = u && u.blocked ? 'unblock' : 'block';
@@ -596,7 +618,7 @@ function attachHandlers(section) {
           }
         });
       });
-      document.querySelectorAll('.delete-btn').forEach(btn => {
+      document.querySelectorAll('#tab-securityInfo .delete-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
           const u = currentRows.find(r => r._id === btn.dataset.id);
           if (!confirm(`Delete ${u ? u.first_name : 'this account'} (${u ? u.roll_no : ''})? This cannot be undone.`)) return;

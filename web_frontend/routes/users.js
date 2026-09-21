@@ -45,6 +45,30 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/users/by-roll/:roll_no
+// One account looked up by its exact roll number (never includes the password
+// hash). Used by the mobile app's Profile screen to show the account's current
+// details straight from MongoDB rather than the copy saved at login.
+router.get('/by-roll/:roll_no', async (req, res) => {
+  try {
+    const user = await User.findOne({ roll_no: String(req.params.roll_no).trim() }).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    res.json({
+      roll_no: user.roll_no,
+      first_name: user.first_name,
+      designation: user.designation,
+      mobile: user.mobile,
+      role: user.role,
+      blocked: user.blocked,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching user.' });
+  }
+});
+
 // POST /api/users  { roll_no, password, first_name, designation, mobile, role }
 // Used by the admin "Add Security" form (single account).
 router.post('/', async (req, res) => {
