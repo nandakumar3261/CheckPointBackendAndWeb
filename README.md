@@ -258,11 +258,32 @@ Finished Status":
 
 The mobile app calls this same server: `POST /api/auth/login` (role `admin` →
 admin app, `security` → guard app), `GET /api/duty-assignments/mine` (guard Home
-and My Duties), `GET /api/users/by-roll/:roll_no` (Profile) and
-`GET /api/users?role=admin` (Contact Us). It needs to reach the server over the
-network: an Android emulator uses `http://10.0.2.2:3000`; a real phone needs the
-computer's LAN address (and port 3000 open in its firewall). See the Flutter
-project's README for the `--dart-define=API_BASE_URL=...` flag.
+and My Duties), `GET /api/users/by-roll/:roll_no` (Profile),
+`GET /api/users?role=admin` (Contact Us), and `GET /api/qr-scans/coverage`
+(both apps' "Get QR Code Data" — see below). It needs to reach the server over
+the network: an Android emulator uses `http://10.0.2.2:3000`; a real phone
+needs the computer's LAN address (and port 3000 open in its firewall). See the
+Flutter project's README for the `--dart-define=API_BASE_URL=...` flag.
+
+### Get QR Code Data: scan coverage by date
+
+Both apps' "Get QR Code Data" screen lets the admin or guard pick any date up
+to and including today, then shows one card per duty assigned that day
+(only the guard's own duty on the guard app; every guard's on the admin app),
+listing every sub place in that duty and whether it was scanned:
+
+- `GET /api/qr-scans/coverage?date=YYYY-MM-DD&guardEmpId=<roll_no>` —
+  `guardEmpId` is optional (admin app omits it). For each `DutyAssignment` on
+  that day, every one of its sub places is tagged `scanned: true/false` and
+  `scans: [...]` — every timestamp that sub place was scanned that day,
+  oldest first — matched against `QrScan` records by `assignmentId`, so a
+  sub place only counts as scanned if a QR was actually submitted against
+  *this* duty.
+- A sub place with no matching scan is drawn highlighted in red with "Not
+  scanned". A scanned one lists every visit with a serial number and
+  timestamp (1, 2, 3, ...), so a missed post — or a post visited only once
+  when several rounds were expected — is obvious without cross-checking a
+  flat scan list by hand.
 
 ### Guard dashboard: live duties
 

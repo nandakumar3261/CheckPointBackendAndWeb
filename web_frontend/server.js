@@ -3,10 +3,10 @@
  *
  * Serves the static HTML/CSS/JS dashboard AND now connects to a local
  * MongoDB instance for authentication, user (admin/guard) management,
- * duty places (main places + sub-places), and duty assignments.
+ * duty places (main places + sub-places), duty assignments, and QR scans.
  *
- * Everything else (QR scans, uploaded images, duty finished status)
- * still runs on the static mock data in public/js/data.js.
+ * Everything else (uploaded images, duty finished status) still runs on
+ * the static mock data in public/js/data.js.
  *
  * Ports are intentionally separate:
  *   - Web server:  PORT in .env (default 3000)
@@ -34,6 +34,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const dutyPlaceRoutes = require('./routes/dutyPlaces');
 const dutyAssignmentRoutes = require('./routes/dutyAssignments');
+const qrScanRoutes = require('./routes/qrScans');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,6 +46,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/duty-places', dutyPlaceRoutes);
 app.use('/api/duty-assignments', dutyAssignmentRoutes);
+app.use('/api/qr-scans', qrScanRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: 'MongoDB (see /api/health/db for connection state)' });

@@ -89,13 +89,16 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/duty-assignments/mine?guardEmpId=2758
-// Powers the guard dashboard (Home + My Duties). Returns ONLY the duties whose
+// GET /api/duty-assignments/mine?guardEmpId=2758&date=YYYY-MM-DD
+// Powers the guard dashboard (Home). Returns ONLY the duties whose
 // guardEmpId exactly equals the given roll number (the admin's "Assign Duty"
 // screen stores the guard's roll_no there), oldest date first, each tagged
 // with status: 'completed' | 'today' | 'upcoming'.
 // Exact match on purpose - the admin list's `search` is a partial regex match,
 // so "27" would also match guard "2758".
+// `date` is optional - when given, restricts the result to the (at most one)
+// duty whose dutyDate falls on that calendar day, powering the Home screen's
+// date picker (today or an earlier date).
 router.get('/mine', async (req, res) => {
   try {
     // typeof check: Express parses ?guardEmpId[$ne]=x into an object, which
@@ -105,7 +108,17 @@ router.get('/mine', async (req, res) => {
       return res.status(400).json({ error: 'guardEmpId is required.' });
     }
 
-    const docs = await DutyAssignment.find({ guardEmpId }).sort({ dutyDate: 1 }).lean();
+    const filter = { guardEmpId };
+    const dateStr = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+    if (dateStr) {
+      const bounds = dayBoundsUTC(dateStr);
+      if (!bounds) {
+        return res.status(400).json({ error: 'Invalid date.' });
+      }
+      filter.dutyDate = { $gte: bounds.start, $lt: bounds.end };
+    }
+
+    const docs = await DutyAssignment.find(filter).sort({ dutyDate: 1 }).lean();
     const data = docs.map((d) => ({ ...d, status: dutyStatus(d.dutyDate) }));
 
     res.json({ data, total: data.length });
