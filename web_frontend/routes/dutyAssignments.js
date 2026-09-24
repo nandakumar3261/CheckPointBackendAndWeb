@@ -52,6 +52,29 @@ function dutyStatus(dutyDate) {
 
 // GET /api/duty-assignments?search=&date=&page=1&limit=10
 //   search - optional, matches guard name, main place, or any sub-place
+// GET /api/duty-assignments/stats
+// Two counts for the admin Home dashboard's "Active assignments" card:
+// how many duty assignments exist in total, and how many sub places those
+// assignments cover between them (each assignment's subPlaces.length,
+// summed) - e.g. 12 assignments might cover 37 sub places between them.
+// Not date-scoped, matching the existing "Active assignments" total.
+router.get('/stats', async (req, res) => {
+  try {
+    const [totalAssignments, subPlaceAgg] = await Promise.all([
+      DutyAssignment.countDocuments({}),
+      DutyAssignment.aggregate([
+        { $project: { subPlaceCount: { $size: { $ifNull: ['$subPlaces', []] } } } },
+        { $group: { _id: null, total: { $sum: '$subPlaceCount' } } },
+      ]),
+    ]);
+    const totalSubPlaces = subPlaceAgg.length ? subPlaceAgg[0].total : 0;
+    res.json({ totalAssignments, totalSubPlaces });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching assignment stats.' });
+  }
+});
+
 //   date   - optional, "YYYY-MM-DD"; restricts to assignments whose dutyDate
 //            falls on that calendar day (used by the "Show Assigned Duties"
 //            date filter and by the Assign Duty board to look up what's

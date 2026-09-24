@@ -176,10 +176,22 @@ const renderers = {
     ${sectionHead('Upload Images', 'Submit a photo as proof of your site visit.')}
     <div class="card" style="max-width:420px;">
       <div class="image-tile" style="margin-bottom:14px;"><div class="ph" style="height:160px;">🖼</div></div>
+      <input type="file" id="imageFileInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
       <div style="display:flex; gap:10px;">
         <button class="btn btn-outline" id="pickImgBtn" style="flex:1;">Pick Image</button>
-        <button class="btn btn-primary" id="uploadImgBtn" style="flex:1;" disabled>Upload</button>
       </div>
+      <div class="field" style="margin-top:14px;">
+        <label>Comment <span style="color:var(--amber);">*</span></label>
+        <textarea id="imageCommentInput" rows="3" maxlength="500" placeholder="Describe what this photo shows (required, min 3 characters)"></textarea>
+        <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+          <span id="imageCommentCount" style="font-size:11px; color:var(--ink-500);">0 / 500</span>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="uploadImgBtn" style="width:100%;" disabled>Upload</button>
+      <div class="error-text" id="imageUploadError"></div>
+      <p style="color:var(--ink-500); font-size:11.5px; margin-top:8px;">
+        Accepted formats: JPG, JPEG, PNG only. Size must be between 10 KB and 2 MB. Comment must be 3-500 characters.
+      </p>
     </div>
   `,
 
@@ -246,11 +258,149 @@ function attachHandlers(section) {
   }
 
   if (section === 'uploadImages') {
-    document.getElementById('pickImgBtn').addEventListener('click', () => {
-      document.querySelector('.ph').textContent = '✅';
-      document.getElementById('uploadImgBtn').disabled = false;
+    // Same rules as admin.js's Upload Image tab (see routes/uploadedImages.js
+    // for the server-side checks these mirror): jpg/jpeg/png only, 10 KB -
+    // 2 MB, must actually decode as an image, and a 3-500 character comment
+    // is required before Upload unlocks.
+    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png'];
+    const ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+    const MIN_IMAGE_SIZE = 10 * 1024; // 10 KB
+    const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2 MB
+    const MIN_COMMENT_LENGTH = 3;
+    const MAX_COMMENT_LENGTH = 500;
+
+    const fileInput = document.getElementById('imageFileInput');
+    const previewTile = document.querySelector('#content .ph');
+    const pickBtn = document.getElementById('pickImgBtn');
+    const commentInput = document.getElementById('imageCommentInput');
+    const commentCount = document.getElementById('imageCommentCount');
+    const uploadBtn = document.getElementById('uploadImgBtn');
+    const errBox = document.getElementById('imageUploadError');
+
+    let selectedFile = null;
+
+    function formatKB(bytes) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    function commentError() {
+      const len = commentInput.value.trim().length;
+      if (len === 0) return 'Please write a comment describing the photo.';
+      if (len < MIN_COMMENT_LENGTH) return `Comment must be at least ${MIN_COMMENT_LENGTH} characters.`;
+      if (len > MAX_COMMENT_LENGTH) return `Comment must be ${MAX_COMMENT_LENGTH} characters or fewer.`;
+      return '';
+    }
+
+    function updateCommentCount() {
+      const len = commentInput.value.trim().length;
+      commentCount.textContent = `${len} / ${MAX_COMMENT_LENGTH}`;
+      commentCount.style.color = (len > 0 && len < MIN_COMMENT_LENGTH) ? '#e2574c' : 'var(--ink-500)';
+    }
+
+    function refreshUploadButton() {
+      uploadBtn.disabled = !(selectedFile && !commentError());
+    }
+
+    function resetSelection() {
+      selectedFile = null;
+      fileInput.value = '';
+      previewTile.innerHTML = '🖼';
+      refreshUploadButton();
+    }
+
+    pickBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+      errBox.textContent = '';
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const isAllowedType = ALLOWED_IMAGE_TYPES.includes(file.type) || ALLOWED_IMAGE_EXTENSIONS.includes(ext);
+      if (!isAllowedType) {
+        errBox.textContent = 'Only JPG, JPEG or PNG images are allowed.';
+        resetSelection();
+        return;
+      }
+
+      if (file.size < MIN_IMAGE_SIZE) {
+        errBox.textContent = `Image is too small (${formatKB(file.size)}). Minimum size is 10 KB.`;
+        resetSelection();
+        return;
+      }
+      if (file.size > MAX_IMAGE_SIZE) {
+        errBox.textContent = `Image is too large (${formatKB(file.size)}). Maximum size is 2 MB.`;
+        resetSelection();
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const probe = new Image();
+        probe.onload = () => {
+          selectedFile = file;
+          previewTile.innerHTML = `<img src="${reader.result}" alt="Selected image" style="width:100%; height:100%; object-fit:cover;">`;
+          refreshUploadButton();
+        };
+        probe.onerror = () => {
+          errBox.textContent = 'This file is not a valid image. Please pick a different JPG or PNG.';
+          resetSelection();
+        };
+        probe.src = reader.result;
+      };
+      reader.onerror = () => {
+        errBox.textContent = 'Could not read the selected file. Please try again.';
+        resetSelection();
+      };
+      reader.readAsDataURL(file);
     });
-    document.getElementById('uploadImgBtn').addEventListener('click', () => alert('Image uploaded (simulated)'));
+
+    commentInput.addEventListener('input', () => {
+      if (commentInput.value.length > MAX_COMMENT_LENGTH) {
+        commentInput.value = commentInput.value.slice(0, MAX_COMMENT_LENGTH);
+      }
+      errBox.textContent = '';
+      updateCommentCount();
+      refreshUploadButton();
+    });
+
+    updateCommentCount();
+
+    uploadBtn.addEventListener('click', async () => {
+      if (!selectedFile) {
+        errBox.textContent = 'Please pick an image first.';
+        return;
+      }
+      const cErr = commentError();
+      if (cErr) {
+        errBox.textContent = cErr;
+        return;
+      }
+      const comment = commentInput.value.trim();
+
+      errBox.textContent = '';
+      uploadBtn.disabled = true;
+      pickBtn.disabled = true;
+      uploadBtn.textContent = 'Uploading...';
+      try {
+        await uploadImageViaApi({
+          file: selectedFile,
+          comment,
+          guardEmpId: user.roll_no,
+          guardName: user.first_name,
+        });
+        alert('Image uploaded successfully.');
+        resetSelection();
+        commentInput.value = '';
+        updateCommentCount();
+      } catch (err) {
+        errBox.textContent = err.message || 'Could not upload the image.';
+        refreshUploadButton();
+      } finally {
+        uploadBtn.textContent = 'Upload';
+        pickBtn.disabled = false;
+      }
+    });
   }
 }
 

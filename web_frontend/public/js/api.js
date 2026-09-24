@@ -152,6 +152,16 @@ async function fetchDutyAssignmentsViaApi({ search, date, page = 1, limit = 10 }
   return readJsonResponse(res); // { data, total, page, limit, totalPages }
 }
 
+/**
+ * Home dashboard's "Active assignments" card: total duty assignments, and
+ * how many sub places those assignments cover between them (see
+ * GET /api/duty-assignments/stats).
+ */
+async function fetchDutyAssignmentStatsViaApi() {
+  const res = await fetch('/api/duty-assignments/stats');
+  return readJsonResponse(res); // { totalAssignments, totalSubPlaces }
+}
+
 async function bulkAssignDutiesViaApi(payload) {
   const res = await fetch('/api/duty-assignments/bulk', {
     method: 'POST',
@@ -184,4 +194,64 @@ async function fetchMyDutiesViaApi(guardEmpId) {
   const params = new URLSearchParams({ guardEmpId });
   const res = await fetch(`/api/duty-assignments/mine?${params.toString()}`);
   return readJsonResponse(res); // { data, total }
+}
+
+/**
+ * QR scans (see routes/qrScans.js, models/QrScan.js).
+ */
+
+async function fetchQrScansViaApi({ search, date, page = 1, limit = 10 } = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (date) params.set('date', date);
+  params.set('page', page);
+  params.set('limit', limit);
+
+  const res = await fetch(`/api/qr-scans?${params.toString()}`);
+  return readJsonResponse(res); // { data, total, page, limit, totalPages }
+}
+
+/**
+ * Per-guard scan coverage for a given date (see GET /api/qr-scans/coverage).
+ * One entry per guard who has a duty assigned that day, with every one of
+ * their sub places tagged as scanned/not-scanned (plus every scan
+ * timestamp) - powers the admin Home page's "Recent QR scans" card, where
+ * tapping a guard on the left shows their main place + sub-place scan
+ * detail on the right.
+ */
+async function fetchQrScanCoverageViaApi({ date, guardEmpId } = {}) {
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  if (guardEmpId) params.set('guardEmpId', guardEmpId);
+
+  const res = await fetch(`/api/qr-scans/coverage?${params.toString()}`);
+  return readJsonResponse(res); // { data, total }
+}
+
+/**
+ * Uploaded site-visit images (see routes/uploadedImages.js, models/UploadedImage.js).
+ */
+
+// file, comment, guardEmpId and guardName are required by the server too -
+// see routes/uploadedImages.js. Sent as multipart/form-data (not JSON)
+// since it carries a real file.
+async function uploadImageViaApi({ file, comment, guardEmpId, guardName }) {
+  const formData = new FormData();
+  formData.append('image', file);
+  formData.append('comment', comment);
+  formData.append('guardEmpId', guardEmpId);
+  formData.append('guardName', guardName);
+
+  const res = await fetch('/api/uploaded-images', { method: 'POST', body: formData });
+  return readJsonResponse(res);
+}
+
+async function fetchUploadedImagesViaApi({ search, page = 1, limit = 20 } = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  params.set('page', page);
+  params.set('limit', limit);
+
+  const res = await fetch(`/api/uploaded-images?${params.toString()}`);
+  return readJsonResponse(res); // { data, total, page, limit, totalPages }
 }

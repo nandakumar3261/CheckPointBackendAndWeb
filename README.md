@@ -52,9 +52,12 @@ mongoose.connect('mongodb://localhost:27017/security_guard_db');
 ## 3. Web frontend + backend — `web_frontend/`
 
 This is connected to MongoDB for authentication and user/guard management.
-Duty places and duty assignments (admin screens and the guard's Home / My Duties
-pages) are also live. QR scans, uploaded images and the duty-finished status
-tab still use the static mock data in `public/js/data.js`.
+Duty places, duty assignments (admin screens and the guard's Home / My Duties
+pages), QR scans, and uploaded images are also live. Uploaded images are
+saved to disk under `public/uploads/images/` and their metadata (guard name,
+employee ID, comment, size, timestamp) to MongoDB — see
+`routes/uploadedImages.js`. Only the duty-finished status tab still uses the
+static mock data in `public/js/data.js`.
 
 It works with either a **local MongoDB** or a **MongoDB Atlas** (cloud)
 cluster — same code either way, just a different `MONGO_URI` in `.env`.
@@ -79,7 +82,7 @@ independent processes:
 ```bash
 cd web_frontend
 cp .env.example .env        # then set MONGO_URI to your Atlas connection string
-npm install                 # installs express, mongoose, bcryptjs, dotenv
+npm install                 # installs express, mongoose, bcryptjs, dotenv, multer
 ```
 If using local MongoDB instead of Atlas, make sure it's running (see
 "Securing local MongoDB with an admin user" below if you want it
@@ -226,6 +229,18 @@ now make this easier to diagnose:
 If you still see this after restarting the server, check the browser's
 Network tab for the failing request and read the actual response body —
 it will now say plainly what went wrong.
+
+### Admin Home dashboard
+
+The four stat cards at the top of Home read live from MongoDB: Guards
+registered (`GET /api/users?role=security`), Main locations
+(`GET /api/duty-places`), QR scans today (`GET /api/qr-scans?date=...`), and
+Sub places. The last one calls `GET /api/duty-assignments/stats`, which sums
+`subPlaces.length` across every duty assignment in one MongoDB aggregation —
+how much ground is currently covered, rather than just how many assignments
+exist. (The endpoint also returns `totalAssignments`, the assignment count
+itself, for anything that wants it later, even though Home doesn't display
+it.)
 
 ### Assign Duty: Assign Duty / Show Assigned Duties
 

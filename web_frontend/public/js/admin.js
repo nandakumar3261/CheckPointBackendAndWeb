@@ -1,18 +1,5 @@
 const user = requireRole('admin');
 
-const titles = {
-  home: 'Home',
-  scanQr: 'Scan QR Code',
-  getQrData: 'Get QR Code Data',
-  uploadImages: 'Upload Images',
-  getUploadedImages: 'Get Uploaded Images',
-  securityData: 'Security Data',
-  addDutyPlaces: 'Duty Places',
-  dutyStatus: 'Assign Duty',
-  profile: 'Update Profile Pic',
-  contact: 'Contact Us',
-};
-
 // Formats an ISO date string (e.g. a MongoDB createdAt) as a readable
 // "DD-MM-YYYY, hh:mm" local date + time, used wherever we show an "Added On".
 function formatDateTime(iso) {
@@ -26,6 +13,20 @@ function formatDateTime(iso) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+// Escapes a value before dropping it into a template-literal-built innerHTML
+// string. Used for the Images tab's comment field specifically, since - unlike
+// the guard names/places elsewhere in this file, which admins/guards type
+// into fixed forms - a comment is free-form text that gets rendered back to
+// every admin viewing "Get Upload Images".
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // "YYYY-MM-DD" for today, in the browser's local time - used as the `min`
@@ -51,8 +52,14 @@ function isPastDutyDate(dutyDateIso) {
   return d.getTime() < today.getTime();
 }
 
+// Topbar "who" strip.
 document.getElementById('whoName').textContent = user ? user.first_name : '';
 document.getElementById('avatarInitial').textContent = user ? user.first_name.charAt(0) : '';
+
+// Sidebar brand slot - shows the logged-in user's own name/initial instead
+// of a static "ADMIN PANEL" label.
+document.getElementById('sidebarUserName').textContent = user ? user.first_name : '';
+document.getElementById('sidebarAvatar').textContent = user ? user.first_name.charAt(0) : '';
 
 document.querySelectorAll('.nav-link[data-section]').forEach(el => {
   el.addEventListener('click', () => {
@@ -69,7 +76,6 @@ document.getElementById('menuToggle').addEventListener('click', () => {
 });
 
 function render(section) {
-  document.getElementById('pageTitle').textContent = titles[section];
   document.getElementById('content').innerHTML = renderers[section]();
   attachHandlers(section);
 }
@@ -78,13 +84,16 @@ function sectionHead(title, sub) {
   return `<div class="section-head"><h2>${title}</h2><p>${sub}</p></div>`;
 }
 
-function openModal(html) {
-  document.getElementById('modalBox').innerHTML = html;
+function openModal(html, { maxWidth } = {}) {
+  const box = document.getElementById('modalBox');
+  box.innerHTML = html;
+  box.style.maxWidth = maxWidth || '';
   document.getElementById('modalOverlay').style.display = 'flex';
 }
 function closeModal() {
   document.getElementById('modalOverlay').style.display = 'none';
   document.getElementById('modalBox').innerHTML = '';
+  document.getElementById('modalBox').style.maxWidth = '';
 }
 document.getElementById('modalOverlay').addEventListener('click', (e) => {
   if (e.target.id === 'modalOverlay') closeModal();
@@ -94,62 +103,83 @@ const renderers = {
   home: () => `
     ${sectionHead('Welcome back, ' + user.first_name.split(' ')[0], user.designation + ' • Roll No ' + user.roll_no)}
     <div class="grid-stats">
-      <div class="stat-card"><div class="num">${MOCK.guards.length}</div><div class="label">Guards registered</div></div>
-      <div class="stat-card"><div class="num">${MOCK.dutyPlaces.length}</div><div class="label">Duty locations</div></div>
-      <div class="stat-card"><div class="num" id="activeAssignmentsStat">…</div><div class="label">Active assignments</div></div>
-      <div class="stat-card"><div class="num">${MOCK.scans.length}</div><div class="label">QR scans today</div></div>
+      <div class="stat-card"><div class="num" id="guardsCountStat">…</div><div class="label">Guards registered</div></div>
+      <div class="stat-card"><div class="num" id="dutyPlacesCountStat">…</div><div class="label">Main locations</div></div>
+      <div class="stat-card"><div class="num" id="activeSubPlacesStat">…</div><div class="label">Sub places</div></div>
+      <div class="stat-card"><div class="num" id="qrScansTodayStat">…</div><div class="label">QR scans today</div></div>
     </div>
     <div class="card">
-      <div class="card-title">Recent QR scans</div>
-      <table>
-        <thead><tr><th>Guard</th><th>Place</th><th>Time</th></tr></thead>
-        <tbody>
-          ${MOCK.scans.map(s => `<tr><td>${s.guardLabel}</td><td>${s.scannedPlace}</td><td>${s.timestamp}</td></tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  `,
-
-  scanQr: () => `
-    ${sectionHead('Scan QR Code', 'Scanning is only accepted between 6:00 PM – 6:00 AM, matching the original app rule.')}
-    <div class="card" style="max-width:420px; text-align:center;">
-      <div style="font-size:46px; margin-bottom:10px;">▦</div>
-      <button class="btn btn-primary" id="simulateScanBtn" style="width:auto; padding:12px 24px;">Scan QR Code</button>
-      <div id="scanResult" style="margin-top:16px;"></div>
-    </div>
-  `,
-
-  getQrData: () => `
-    ${sectionHead('Get QR Code Data', 'Attendance scans recorded by guards, grouped by duty date range.')}
-    <div class="card">
-      <table>
-        <thead><tr><th>Guard</th><th>Scanned Place</th><th>Timestamp</th><th>Date Range</th></tr></thead>
-        <tbody>
-          ${MOCK.scans.map(s => `<tr><td>${s.guardLabel}</td><td>${s.scannedPlace}</td><td>${s.timestamp}</td><td>${s.dateRange}</td></tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  `,
-
-  uploadImages: () => `
-    ${sectionHead('Upload Images', 'Attach a site-visit photo. In production this uploads to cloud storage.')}
-    <div class="card" style="max-width:420px;">
-      <div class="image-tile" style="margin-bottom:14px;"><div class="ph" style="height:160px;">🖼</div></div>
-      <div style="display:flex; gap:10px;">
-        <button class="btn btn-outline" id="pickImgBtn" style="flex:1;">Pick Image</button>
-        <button class="btn btn-primary" id="uploadImgBtn" style="flex:1;" disabled>Upload</button>
+      <div class="card-title" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <span id="recentScansHeading">Today's QR Code Scanned Data</span>
+        <input type="date" class="recent-scans-date" id="recentScansDate" value="${todayISODate()}" max="${todayISODate()}">
+      </div>
+      <div class="data-toolbar">
+        <div class="search-field">
+          <input type="text" id="recentScansSearch" placeholder="Search by name, emp id, main place or sub place..." />
+        </div>
+        <div class="toolbar-right">
+          <select id="recentScansStatusFilter">
+            <option value="all" selected>All</option>
+            <option value="scanned">Scanned</option>
+            <option value="not-scanned">Not scanned</option>
+          </select>
+          <button class="btn btn-outline" id="downloadRecentScansPdfBtn" type="button">⬇ Download PDF</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="recent-scans-table">
+          <colgroup>
+            <col style="width:56px;">
+            <col style="width:190px;">
+            <col style="width:170px;">
+            <col style="width:64px;">
+            <col style="width:260px;">
+            <col style="width:120px;">
+            <col style="width:170px;">
+          </colgroup>
+          <thead><tr><th class="serial-col">#</th><th>Guard</th><th>Main Place</th><th class="serial-col">Sub #</th><th>Sub Place</th><th>Status</th><th>Scanned At</th></tr></thead>
+          <tbody id="recentScansBody">
+            <tr><td colspan="7" style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   `,
 
-  getUploadedImages: () => `
-    ${sectionHead('Get Uploaded Images', 'Site-visit photo evidence submitted by guards.')}
-    <div class="image-grid">
-      ${MOCK.uploadedImages.map(i => `
-        <div class="image-tile">
-          <div class="ph">🖼</div>
-          <div class="meta"><b>${i.guardLabel}</b><span>${i.place} • ${i.timestamp}</span></div>
-        </div>`).join('')}
+  images: () => `
+    ${sectionHead('Images', 'Upload site-visit photo evidence and review what has been submitted.')}
+
+    <div class="tabs" id="imagesTabs">
+      <button class="tab-btn active" data-tab="uploadImage" type="button">Upload Image</button>
+      <button class="tab-btn" data-tab="getUploadImages" type="button">Get Upload Images</button>
+    </div>
+
+    <div class="tab-panel" id="tab-uploadImage">
+      <div class="card" style="max-width:420px;">
+        <div class="image-tile" style="margin-bottom:14px;"><div class="ph" style="height:160px;">🖼</div></div>
+        <input type="file" id="imageFileInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-outline" id="pickImgBtn" style="flex:1;">Pick Image</button>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Comment <span style="color:var(--amber);">*</span></label>
+          <textarea id="imageCommentInput" rows="3" maxlength="500" placeholder="Describe what this photo shows (required, min 3 characters)"></textarea>
+          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+            <span id="imageCommentCount" style="font-size:11px; color:var(--ink-500);">0 / 500</span>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="uploadImgBtn" style="width:100%;" disabled>Upload</button>
+        <div class="error-text" id="imageUploadError"></div>
+        <p style="color:var(--ink-500); font-size:11.5px; margin-top:8px;">
+          Accepted formats: JPG, JPEG, PNG only. Size must be between 10 KB and 2 MB. Comment must be 3-500 characters.
+        </p>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-getUploadImages" style="display:none;">
+      <div class="image-grid" id="uploadedImagesGrid">
+        <p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p>
+      </div>
     </div>
   `,
 
@@ -453,26 +483,516 @@ const renderers = {
 
 function attachHandlers(section) {
   if (section === 'home') {
-    fetchDutyAssignmentsViaApi({ limit: 1 })
-      .then(res => { document.getElementById('activeAssignmentsStat').textContent = res.total; })
-      .catch(() => { document.getElementById('activeAssignmentsStat').textContent = '—'; });
+    fetchUsersViaApi({ role: 'security', limit: 1 })
+      .then(res => { document.getElementById('guardsCountStat').textContent = res.total; })
+      .catch(() => { document.getElementById('guardsCountStat').textContent = '—'; });
+
+    fetchDutyPlacesViaApi({ limit: 1 })
+      .then(res => { document.getElementById('dutyPlacesCountStat').textContent = res.total; })
+      .catch(() => { document.getElementById('dutyPlacesCountStat').textContent = '—'; });
+
+    fetchDutyAssignmentStatsViaApi()
+      .then(res => { document.getElementById('activeSubPlacesStat').textContent = res.totalSubPlaces; })
+      .catch(() => { document.getElementById('activeSubPlacesStat').textContent = '—'; });
+
+    fetchQrScansViaApi({ date: todayISODate(), limit: 1 })
+      .then(res => { document.getElementById('qrScansTodayStat').textContent = res.total; })
+      .catch(() => { document.getElementById('qrScansTodayStat').textContent = '—'; });
+
+    // ---------- Recent QR scans: date-scoped table with search + status filter ----------
+    // rows are the per-guard coverage data flattened to one row per sub place, so the
+    // table shows everything at a glance with no tap needed to drill into a guard.
+    const recentScansState = { date: todayISODate(), rows: [], search: '', status: 'all' };
+
+    function flattenRecentScansCoverage(guards) {
+      const rows = [];
+      guards.forEach(g => {
+        g.subPlaces.forEach(sp => {
+          rows.push({
+            guardName: g.guardName,
+            guardEmpId: g.guardEmpId,
+            mainPlace: g.mainPlace,
+            subPlace: sp.name,
+            scanned: sp.scanned,
+            scans: sp.scans,
+          });
+        });
+      });
+      return rows;
+    }
+
+    function matchesRecentScansFilters(row) {
+      if (recentScansState.status === 'scanned' && !row.scanned) return false;
+      if (recentScansState.status === 'not-scanned' && row.scanned) return false;
+      if (recentScansState.search) {
+        const haystack = `${row.guardName} ${row.guardEmpId} ${row.mainPlace} ${row.subPlace}`.toLowerCase();
+        if (!haystack.includes(recentScansState.search.toLowerCase())) return false;
+      }
+      return true;
+    }
+
+    // Tags each row with:
+    //  - groupIndex: one shared serial number per guard+main-place group
+    //    (increments only when the guard or their main place changes)
+    //  - subIndex: that sub place's own number *within* its group (resets
+    //    to 1 at the start of every new group)
+    //  - isNewGuard / isNewGroup: group-boundary flags, used to decide which
+    //    rowspan cells to print
+    function computeGroupedRecentScans(rows) {
+      let groupIndex = 0;
+      let subIndex = 0;
+      return rows.map((r, i) => {
+        const prev = rows[i - 1];
+        const sameGuardAsPrev = prev && prev.guardEmpId === r.guardEmpId;
+        const sameGroupAsPrev = sameGuardAsPrev && prev.mainPlace === r.mainPlace;
+        if (sameGroupAsPrev) {
+          subIndex++;
+        } else {
+          groupIndex++;
+          subIndex = 1;
+        }
+        return { ...r, groupIndex, subIndex, isNewGuard: !sameGuardAsPrev, isNewGroup: !sameGroupAsPrev };
+      });
+    }
+
+    function renderRecentScansTable() {
+      const body = document.getElementById('recentScansBody');
+      const filtered = recentScansState.rows.filter(matchesRecentScansFilters);
+      if (!filtered.length) {
+        const msg = recentScansState.rows.length ? 'No scans match your search/filter.' : 'No duty assigned for this date.';
+        body.innerHTML = `<tr><td colspan="7" style="color:var(--ink-500); font-size:13px;">${msg}</td></tr>`;
+        return;
+      }
+
+      // Rows already come grouped by guard (then by main place), so a repeat
+      // guard/main-place/serial only ever shows up on consecutive rows -
+      // merge those with rowspan instead of re-printing them on every line.
+      const grouped = computeGroupedRecentScans(filtered);
+      const html = [];
+      for (let i = 0; i < grouped.length; i++) {
+        const r = grouped[i];
+        const zebra = r.groupIndex % 2 === 0 ? ' style="background:rgba(255,255,255,0.025);"' : '';
+        html.push(`<tr${zebra}>`);
+
+        let groupSpan = 0;
+        if (r.isNewGroup) {
+          while (grouped[i + groupSpan] && grouped[i + groupSpan].groupIndex === r.groupIndex) groupSpan++;
+        }
+        let guardSpan = 0;
+        if (r.isNewGuard) {
+          while (grouped[i + guardSpan] && grouped[i + guardSpan].guardEmpId === r.guardEmpId) guardSpan++;
+        }
+
+        if (r.isNewGroup) {
+          html.push(`<td class="serial-col" rowspan="${groupSpan}" style="vertical-align:top;">${r.groupIndex}</td>`);
+        }
+        if (r.isNewGuard) {
+          html.push(`<td rowspan="${guardSpan}" style="vertical-align:top;">${r.guardName} ( ${r.guardEmpId} )</td>`);
+        }
+        if (r.isNewGroup) {
+          html.push(`<td class="preserve-space" rowspan="${groupSpan}" style="vertical-align:top;">${r.mainPlace}</td>`);
+        }
+
+        html.push(`<td class="serial-col">${r.subIndex}</td>`);
+        html.push(`<td class="preserve-space">${r.subPlace}</td>`);
+        html.push(`<td><span class="badge ${r.scanned ? 'badge-success' : 'badge-neutral'}">${r.scanned ? 'Scanned' : 'Not scanned'}</span></td>`);
+        html.push(`<td style="white-space:nowrap;">${r.scanned ? r.scans.map(t => formatDateTime(t)).join('<br>') : '—'}</td>`);
+        html.push('</tr>');
+      }
+      body.innerHTML = html.join('');
+    }
+
+    // "YYYY-MM-DD" -> "DD-MM-YYYY", plain string reorder (no Date parsing,
+    // so there's no timezone risk of landing on the wrong day).
+    function formatIsoDateDisplay(isoDateStr) {
+      const [y, m, d] = isoDateStr.split('-');
+      return `${d}-${m}-${y}`;
+    }
+
+    function updateRecentScansHeading(date) {
+      const heading = document.getElementById('recentScansHeading');
+      if (!heading) return;
+      heading.textContent = date === todayISODate()
+        ? "Today's QR Code Scanned Data"
+        : `${formatIsoDateDisplay(date)} QR Code Scanned Data`;
+    }
+
+    function loadRecentScans(date) {
+      updateRecentScansHeading(date);
+      document.getElementById('recentScansBody').innerHTML =
+        '<tr><td colspan="7" style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</td></tr>';
+
+      fetchQrScanCoverageViaApi({ date })
+        .then(res => {
+          recentScansState.rows = flattenRecentScansCoverage(res.data);
+          renderRecentScansTable();
+        })
+        .catch(err => {
+          document.getElementById('recentScansBody').innerHTML =
+            `<tr><td colspan="7" style="color:var(--danger); font-size:13px;">Could not load from MongoDB: ${err.message}</td></tr>`;
+        });
+    }
+
+    // Tapping anywhere on the date field - not just the browser's tiny
+    // calendar-icon hit target - opens the picker.
+    const recentScansDateInput = document.getElementById('recentScansDate');
+    recentScansDateInput.addEventListener('click', () => {
+      if (typeof recentScansDateInput.showPicker === 'function') {
+        try { recentScansDateInput.showPicker(); } catch (err) { /* already open */ }
+      }
+    });
+    recentScansDateInput.addEventListener('change', (e) => {
+      recentScansState.date = e.target.value || todayISODate();
+      loadRecentScans(recentScansState.date);
+    });
+
+    let recentScansSearchTimer;
+    document.getElementById('recentScansSearch').addEventListener('input', (e) => {
+      clearTimeout(recentScansSearchTimer);
+      recentScansSearchTimer = setTimeout(() => {
+        recentScansState.search = e.target.value.trim();
+        renderRecentScansTable();
+      }, 250);
+    });
+
+    document.getElementById('recentScansStatusFilter').addEventListener('change', (e) => {
+      recentScansState.status = e.target.value;
+      renderRecentScansTable();
+    });
+
+    document.getElementById('downloadRecentScansPdfBtn').addEventListener('click', () => {
+      const filtered = recentScansState.rows.filter(matchesRecentScansFilters);
+      if (!filtered.length) {
+        alert('Nothing to export for this date/search/filter.');
+        return;
+      }
+      if (typeof jspdf === 'undefined' || !jspdf.jsPDF) {
+        alert('The PDF export library did not load. Check your internet connection and try again.');
+        return;
+      }
+
+      // Mirrors the on-screen table exactly: one grid line per cell, and the
+      // #/Guard/Main Place columns merged (via autoTable's rowSpan) across
+      // every sub place in that guard+main-place group.
+      const grouped = computeGroupedRecentScans(filtered);
+      const body = [];
+      for (let i = 0; i < grouped.length; i++) {
+        const r = grouped[i];
+        const row = [];
+
+        if (r.isNewGroup) {
+          let span = 0;
+          while (grouped[i + span] && grouped[i + span].groupIndex === r.groupIndex) span++;
+          row.push({ content: String(r.groupIndex), rowSpan: span, styles: { valign: 'top' } });
+        }
+        if (r.isNewGuard) {
+          let span = 0;
+          while (grouped[i + span] && grouped[i + span].guardEmpId === r.guardEmpId) span++;
+          row.push({ content: `${r.guardName} (${r.guardEmpId})`, rowSpan: span, styles: { valign: 'top' } });
+        }
+        if (r.isNewGroup) {
+          let span = 0;
+          while (grouped[i + span] && grouped[i + span].groupIndex === r.groupIndex) span++;
+          row.push({ content: r.mainPlace, rowSpan: span, styles: { valign: 'top' } });
+        }
+
+        row.push(String(r.subIndex));
+        row.push(r.subPlace);
+        row.push(r.scanned ? 'Scanned' : 'Not scanned');
+        row.push(r.scanned ? r.scans.map(t => formatDateTime(t)).join('\n') : '—');
+        body.push(row);
+      }
+
+      const doc = new jspdf.jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(14);
+      doc.text(`Date wise Data — ${recentScansState.date}`, 14, 15);
+      doc.autoTable({
+        startY: 22,
+        theme: 'grid',
+        head: [['#', 'Guard', 'Main Place', 'Sub #', 'Sub Place', 'Status', 'Scanned At']],
+        body,
+        styles: { fontSize: 8, lineWidth: 0.1, lineColor: [38, 56, 90] },
+        headStyles: { fillColor: [18, 33, 58] },
+      });
+      doc.save(`qr_scans_${recentScansState.date}.pdf`);
+    });
+
+    loadRecentScans(recentScansState.date);
   }
 
-  if (section === 'scanQr') {
-    document.getElementById('simulateScanBtn').addEventListener('click', () => {
-      const place = MOCK.dutyPlaces[0].subPlaces[0];
-      document.getElementById('scanResult').innerHTML = `
-        <div style="background:var(--navy-800); padding:12px; border-radius:8px; margin-bottom:10px;">Scanned data: <b>${place}</b></div>
-        <button class="btn btn-primary" style="width:auto; padding:8px 20px;" onclick="alert('Data saved successfully (simulated)')">Submit</button>`;
+  if (section === 'images') {
+    // ---------- Tab switching ----------
+    const imgTabNames = ['uploadImage', 'getUploadImages'];
+    document.querySelectorAll('#imagesTabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#imagesTabs .tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        imgTabNames.forEach(t => {
+          document.getElementById('tab-' + t).style.display = (t === btn.dataset.tab) ? 'block' : 'none';
+        });
+        if (btn.dataset.tab === 'getUploadImages') loadUploadedImages();
+      });
     });
-  }
 
-  if (section === 'uploadImages') {
-    document.getElementById('pickImgBtn').addEventListener('click', () => {
-      document.querySelector('.ph').textContent = '✅';
-      document.getElementById('uploadImgBtn').disabled = false;
+    // ======================================================================
+    // Tab: Upload Image
+    //  - jpg/jpeg/png only, checked by both MIME type and file extension
+    //    (some browsers/OSes leave `file.type` blank for local files, so the
+    //    extension check is the fallback that always works), AND the file
+    //    must actually decode as an image (catches a renamed .exe/.txt that
+    //    only *looks* like a jpg/png from its name).
+    //  - size must be between 10 KB and 2 MB.
+    //  - a comment describing the photo is required before Upload unlocks,
+    //    and must be 3-500 characters after trimming whitespace.
+    // The server (routes/uploadedImages.js) re-checks every one of these
+    // rules independently - including the image-signature check - since a
+    // browser check alone can always be bypassed.
+    // ======================================================================
+    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png'];
+    const ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+    const MIN_IMAGE_SIZE = 10 * 1024; // 10 KB
+    const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2 MB
+    const MIN_COMMENT_LENGTH = 3;
+    const MAX_COMMENT_LENGTH = 500;
+
+    const fileInput = document.getElementById('imageFileInput');
+    const previewTile = document.querySelector('#tab-uploadImage .ph');
+    const pickBtn = document.getElementById('pickImgBtn');
+    const commentInput = document.getElementById('imageCommentInput');
+    const commentCount = document.getElementById('imageCommentCount');
+    const uploadBtn = document.getElementById('uploadImgBtn');
+    const errBox = document.getElementById('imageUploadError');
+
+    let selectedFile = null;
+
+    function formatKB(bytes) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    // Returns '' when the comment is valid, or an error message otherwise.
+    // Centralized so the same rule runs on every keystroke AND again right
+    // before the upload actually fires.
+    function commentError() {
+      const len = commentInput.value.trim().length;
+      if (len === 0) return 'Please write a comment describing the photo.';
+      if (len < MIN_COMMENT_LENGTH) return `Comment must be at least ${MIN_COMMENT_LENGTH} characters.`;
+      if (len > MAX_COMMENT_LENGTH) return `Comment must be ${MAX_COMMENT_LENGTH} characters or fewer.`;
+      return '';
+    }
+
+    function updateCommentCount() {
+      const len = commentInput.value.trim().length;
+      commentCount.textContent = `${len} / ${MAX_COMMENT_LENGTH}`;
+      commentCount.style.color = (len > 0 && len < MIN_COMMENT_LENGTH) ? '#e2574c' : 'var(--ink-500)';
+    }
+
+    // Upload only unlocks once a valid file AND a valid comment are both
+    // present - requirement #1 ("at the time of pick image, user needs to
+    // write a comment").
+    function refreshUploadButton() {
+      uploadBtn.disabled = !(selectedFile && !commentError());
+    }
+
+    function resetSelection() {
+      selectedFile = null;
+      fileInput.value = '';
+      previewTile.innerHTML = '🖼';
+      refreshUploadButton();
+    }
+
+    pickBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+      errBox.textContent = '';
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const isAllowedType = ALLOWED_IMAGE_TYPES.includes(file.type) || ALLOWED_IMAGE_EXTENSIONS.includes(ext);
+      if (!isAllowedType) {
+        errBox.textContent = 'Only JPG, JPEG or PNG images are allowed.';
+        resetSelection();
+        return;
+      }
+
+      // Requirement #2: image size must be between 10 KB and 2 MB.
+      if (file.size < MIN_IMAGE_SIZE) {
+        errBox.textContent = `Image is too small (${formatKB(file.size)}). Minimum size is 10 KB.`;
+        resetSelection();
+        return;
+      }
+      if (file.size > MAX_IMAGE_SIZE) {
+        errBox.textContent = `Image is too large (${formatKB(file.size)}). Maximum size is 2 MB.`;
+        resetSelection();
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Confirm the browser can actually decode this as an image before
+        // accepting it - a corrupt file or a non-image renamed to .jpg/.png
+        // would pass the checks above on name/size alone.
+        const probe = new Image();
+        probe.onload = () => {
+          selectedFile = file;
+          previewTile.innerHTML = `<img src="${reader.result}" alt="Selected image" style="width:100%; height:100%; object-fit:cover;">`;
+          refreshUploadButton();
+        };
+        probe.onerror = () => {
+          errBox.textContent = 'This file is not a valid image. Please pick a different JPG or PNG.';
+          resetSelection();
+        };
+        probe.src = reader.result;
+      };
+      reader.onerror = () => {
+        errBox.textContent = 'Could not read the selected file. Please try again.';
+        resetSelection();
+      };
+      reader.readAsDataURL(file);
     });
-    document.getElementById('uploadImgBtn').addEventListener('click', () => alert('Image uploaded (simulated)'));
+
+    commentInput.addEventListener('input', () => {
+      // Enforce the max length even against a pasted block of text that
+      // exceeds the textarea's `maxlength` attribute in older browsers.
+      if (commentInput.value.length > MAX_COMMENT_LENGTH) {
+        commentInput.value = commentInput.value.slice(0, MAX_COMMENT_LENGTH);
+      }
+      errBox.textContent = '';
+      updateCommentCount();
+      refreshUploadButton();
+    });
+
+    updateCommentCount();
+
+    uploadBtn.addEventListener('click', async () => {
+      if (!selectedFile) {
+        errBox.textContent = 'Please pick an image first.';
+        return;
+      }
+      const cErr = commentError();
+      if (cErr) {
+        errBox.textContent = cErr;
+        return;
+      }
+      const comment = commentInput.value.trim();
+
+      errBox.textContent = '';
+      uploadBtn.disabled = true;
+      pickBtn.disabled = true;
+      uploadBtn.textContent = 'Uploading...';
+      try {
+        await uploadImageViaApi({
+          file: selectedFile,
+          comment,
+          guardEmpId: user.roll_no,
+          guardName: user.first_name,
+        });
+        alert('Image uploaded successfully.');
+        resetSelection();
+        commentInput.value = '';
+        updateCommentCount();
+      } catch (err) {
+        errBox.textContent = err.message || 'Could not upload the image.';
+        refreshUploadButton();
+      } finally {
+        uploadBtn.textContent = 'Upload';
+        pickBtn.disabled = false;
+      }
+    });
+
+    // ======================================================================
+    // Tab: Get Upload Images - every photo submitted so far, most recent
+    // first, each tagged with who submitted it (name + emp id), when
+    // (date + time), and the comment they wrote at pick-time. Tapping a
+    // thumbnail opens it full-size in a modal; each tile (and the modal)
+    // also has a Download button that saves the original file.
+    // ======================================================================
+    let uploadedImagesById = new Map();
+
+    function imageFileExt(imageUrl) {
+      const dot = imageUrl.lastIndexOf('.');
+      return dot === -1 ? '.jpg' : imageUrl.slice(dot);
+    }
+
+    function downloadFileName(img) {
+      const uploaded = new Date(img.uploadedAt || img.createdAt);
+      const stamp = isNaN(uploaded.getTime())
+        ? Date.now()
+        : uploaded.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      return `${img.guardEmpId}_${stamp}${imageFileExt(img.imageUrl)}`;
+    }
+
+    function formatImageDateTime(img) {
+      const uploaded = new Date(img.uploadedAt || img.createdAt);
+      const dateStr = isNaN(uploaded.getTime())
+        ? '—'
+        : uploaded.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timeStr = isNaN(uploaded.getTime())
+        ? ''
+        : uploaded.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      return { dateStr, timeStr };
+    }
+
+    // Tapping a thumbnail (anywhere except its Download button) opens the
+    // full-size image plus its guard/date/comment details in the shared
+    // modal, with its own Download button alongside.
+    function openImagePreview(id) {
+      const img = uploadedImagesById.get(id);
+      if (!img) return;
+      const { dateStr, timeStr } = formatImageDateTime(img);
+      openModal(`
+        <div class="image-preview-modal">
+          <img src="${img.imageUrl}" alt="Uploaded by ${escapeHtml(img.guardName)}">
+          <div class="meta">
+            <b>${escapeHtml(img.guardName)} ( ${escapeHtml(img.guardEmpId)} )</b>
+            <span>${dateStr} • ${timeStr}</span>
+            <p class="comment">"${escapeHtml(img.comment)}"</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="closePreviewBtn">Close</button>
+            <a class="btn btn-primary" style="width:auto; padding:10px 20px; text-decoration:none;" href="${img.imageUrl}" download="${downloadFileName(img)}">Download</a>
+          </div>
+        </div>
+      `, { maxWidth: '640px' });
+      document.getElementById('closePreviewBtn').addEventListener('click', closeModal);
+    }
+
+    async function loadUploadedImages() {
+      const grid = document.getElementById('uploadedImagesGrid');
+      grid.innerHTML = '<p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p>';
+      try {
+        const { data } = await fetchUploadedImagesViaApi({ limit: 100 });
+        uploadedImagesById = new Map(data.map(img => [img._id, img]));
+
+        if (data.length === 0) {
+          grid.innerHTML = '<p style="color:var(--ink-500); font-size:13px;">No images uploaded yet.</p>';
+          return;
+        }
+        grid.innerHTML = data.map(img => {
+          const { dateStr, timeStr } = formatImageDateTime(img);
+          return `
+            <div class="image-tile">
+              <div class="ph viewable" style="height:140px;" data-img-id="${img._id}" title="Tap to view full size">
+                <img src="${img.imageUrl}" alt="Uploaded by ${escapeHtml(img.guardName)}" style="width:100%; height:100%; object-fit:cover;">
+                <a class="dl-btn" href="${img.imageUrl}" download="${downloadFileName(img)}" title="Download" onclick="event.stopPropagation()">⬇</a>
+              </div>
+              <div class="meta">
+                <b>${escapeHtml(img.guardName)} ( ${escapeHtml(img.guardEmpId)} )</b>
+                <span>${dateStr} • ${timeStr}</span>
+                <p class="comment">"${escapeHtml(img.comment)}"</p>
+              </div>
+            </div>`;
+        }).join('');
+
+        grid.querySelectorAll('.ph.viewable').forEach(el => {
+          el.addEventListener('click', () => openImagePreview(el.dataset.imgId));
+        });
+      } catch (err) {
+        grid.innerHTML = `<p style="color:#e2574c; font-size:13px;">${err.message || 'Could not load uploaded images.'}</p>`;
+      }
+    }
+
+    loadUploadedImages();
   }
 
   if (section === 'securityData') {

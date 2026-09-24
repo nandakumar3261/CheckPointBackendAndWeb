@@ -37,11 +37,9 @@ const MOCK = {
     { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Suresh Pawar ( 3049 )', scannedPlace: 'Loading Bay 1', timestamp: '10-01-2024 19:15:02' },
   ],
 
-  uploadedImages: [
-    { guardLabel: 'Ramesh Yadav ( 2758 )', place: 'Gate A', timestamp: '10-01-2024 18:43:20' },
-    { guardLabel: 'Suresh Pawar ( 3049 )', place: 'Loading Bay 1', timestamp: '10-01-2024 19:16:05' },
-    { guardLabel: 'Vikram Singh ( 3105 )', place: 'Level 1', timestamp: '11-01-2024 20:02:44' },
-  ],
+  // Uploaded images are no longer mock data - admin.js's Images section now
+  // reads/writes real MongoDB documents via fetchUploadedImagesViaApi() /
+  // uploadImageViaApi() in api.js (see routes/uploadedImages.js).
 
   // Used by the admin dashboard's "Duty Finished Status" tab (still a
   // placeholder - see renderers.dutyStatus in admin.js) and the guard-facing

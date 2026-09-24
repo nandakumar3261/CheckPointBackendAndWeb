@@ -5,8 +5,9 @@
  * MongoDB instance for authentication, user (admin/guard) management,
  * duty places (main places + sub-places), duty assignments, and QR scans.
  *
- * Everything else (uploaded images, duty finished status) still runs on
- * the static mock data in public/js/data.js.
+ * Uploaded site-visit images (routes/uploadedImages.js) are also backed by
+ * MongoDB + local disk storage now. Duty finished status is the only piece
+ * still running on the static mock data in public/js/data.js.
  *
  * Ports are intentionally separate:
  *   - Web server:  PORT in .env (default 3000)
@@ -35,6 +36,7 @@ const userRoutes = require('./routes/users');
 const dutyPlaceRoutes = require('./routes/dutyPlaces');
 const dutyAssignmentRoutes = require('./routes/dutyAssignments');
 const qrScanRoutes = require('./routes/qrScans');
+const uploadedImageRoutes = require('./routes/uploadedImages');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +49,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/duty-places', dutyPlaceRoutes);
 app.use('/api/duty-assignments', dutyAssignmentRoutes);
 app.use('/api/qr-scans', qrScanRoutes);
+app.use('/api/uploaded-images', uploadedImageRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: 'MongoDB (see /api/health/db for connection state)' });

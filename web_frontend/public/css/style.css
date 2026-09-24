@@ -26,6 +26,14 @@ body {
   color: var(--ink-100);
 }
 
+/* Page still scrolls normally - just without the browser's default bar,
+   so the dark UI isn't interrupted by a light native scrollbar. */
+html {
+  scrollbar-width: none;    /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+html::-webkit-scrollbar { display: none; } /* Chrome/Safari/Opera */
+
 h1, h2, h3, .display {
   font-family: 'Big Shoulders Display', sans-serif;
   letter-spacing: 0.01em;
@@ -148,7 +156,7 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 6px;
 }
 
-.field input, .field select {
+.field input, .field select, .field textarea {
   width: 100%;
   padding: 12px 14px;
   border-radius: var(--radius);
@@ -159,7 +167,12 @@ a { color: inherit; text-decoration: none; }
   font-family: inherit;
 }
 
-.field input:focus, .field select:focus {
+.field textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.field input:focus, .field select:focus, .field textarea:focus {
   outline: none;
   border-color: var(--amber);
 }
@@ -272,11 +285,10 @@ a { color: inherit; text-decoration: none; }
 }
 
 .topbar {
+  display: none; /* the sidebar's own header already shows who's signed in on desktop */
   height: 64px;
   border-bottom: 1px solid var(--navy-line);
-  display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 26px;
   background: var(--navy-950);
   position: sticky;
@@ -284,7 +296,11 @@ a { color: inherit; text-decoration: none; }
   z-index: 5;
 }
 
-.topbar h1 { font-size: 19px; color: var(--ink-100); }
+/* Only needed on mobile, where the sidebar (and its own name/avatar) is
+   hidden until the hamburger button opens it. */
+@media (max-width: 900px) {
+  .topbar { display: flex; }
+}
 
 .topbar .who {
   display: flex;
@@ -292,6 +308,7 @@ a { color: inherit; text-decoration: none; }
   gap: 10px;
   font-size: 13px;
   color: var(--ink-300);
+  margin-left: auto; /* stays pinned to the right whether or not the mobile menu-toggle is showing */
 }
 
 .avatar {
@@ -443,9 +460,39 @@ tr:last-child td { border-bottom: none; }
   color: var(--ink-500);
   font-size: 22px;
 }
+.image-tile .ph.viewable {
+  position: relative;
+  cursor: pointer;
+}
+.image-tile .ph.viewable img { transition: opacity 0.15s ease; }
+.image-tile .ph.viewable:hover img { opacity: 0.85; }
+.image-tile .dl-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 17, 32, 0.72);
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  color: var(--ink-100);
+  font-size: 14px;
+  text-decoration: none;
+  line-height: 1;
+}
+.image-tile .dl-btn:hover { background: var(--amber); color: var(--navy-900); border-color: var(--amber); }
 .image-tile .meta { padding: 10px 12px; }
 .image-tile .meta b { font-size: 12.5px; display: block; }
 .image-tile .meta span { font-size: 11px; color: var(--ink-500); }
+.image-tile .meta p.comment {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-300);
+  font-style: italic;
+  line-height: 1.4;
+  word-break: break-word;
+}
 
 .icon-btn {
   background: transparent;
@@ -683,6 +730,36 @@ tr:last-child td { border-bottom: none; }
 
 .badge-neutral { background: rgba(255,255,255,0.08); color: var(--ink-300); }
 
+/* Date-filter input outside a .data-toolbar (e.g. Recent QR Scans card header) */
+.recent-scans-date {
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--navy-line);
+  background: var(--navy-800);
+  color: var(--ink-100);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.recent-scans-date:focus { outline: none; border-color: var(--amber); }
+
+/* ---------- Home: Recent QR Scans table (bordered grid + merged serial cells) ---------- */
+.recent-scans-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1030px; /* sum of colgroup widths - scrolls horizontally below this */
+}
+.recent-scans-table th,
+.recent-scans-table td {
+  border: 1px solid var(--navy-line);
+}
+.recent-scans-table thead th { border-top: none; }
+.recent-scans-table tr:first-child td { border-top: none; }
+.recent-scans-table tr td:first-child,
+.recent-scans-table tr th:first-child { border-left: none; }
+.recent-scans-table tr td:last-child,
+.recent-scans-table tr th:last-child { border-right: none; }
+
 /* Date-filter input dropped into a .data-toolbar alongside the search box */
 .data-toolbar input[type="date"] {
   padding: 9px 12px;
@@ -792,4 +869,26 @@ tr:last-child td { border-bottom: none; }
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
+}
+
+/* ---------- Image preview modal (Get Upload Images "tap to open") ---------- */
+.image-preview-modal img {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--navy-800);
+  display: block;
+}
+.image-preview-modal .meta {
+  margin-top: 14px;
+}
+.image-preview-modal .meta b { font-size: 14px; display: block; }
+.image-preview-modal .meta span { font-size: 12px; color: var(--ink-500); }
+.image-preview-modal .meta p.comment {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--ink-300);
+  font-style: italic;
+  line-height: 1.5;
 }

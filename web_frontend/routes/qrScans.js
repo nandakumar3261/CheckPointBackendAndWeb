@@ -30,9 +30,13 @@ function dayBoundsUTC(dateStr) {
   return { start, end };
 }
 
-// GET /api/qr-scans?search=&page=1&limit=10
+// GET /api/qr-scans?search=&date=&page=1&limit=10
+//   search - optional, matches guard name/employee ID, main place, or sub place
+//   date   - optional, "YYYY-MM-DD"; restricts to scans made on that
+//            calendar day - used by the admin Home page's "QR scans today"
+//            stat (?date=<today>&limit=1, reading just `total`).
 // Every scan recorded by every guard - the admin's "Get QR Code Data"
-// screen. search matches guard name/employee ID, main place, or sub place.
+// screen.
 router.get('/', async (req, res) => {
   try {
     const filter = {};
@@ -40,6 +44,12 @@ router.get('/', async (req, res) => {
     if (search) {
       const re = new RegExp(escapeRegex(search), 'i');
       filter.$or = [{ guardName: re }, { guardEmpId: re }, { mainPlace: re }, { scannedSubPlace: re }];
+    }
+
+    const dateStr = (req.query.date || '').trim();
+    if (dateStr) {
+      const bounds = dayBoundsUTC(dateStr);
+      if (bounds) filter.scannedAt = { $gte: bounds.start, $lt: bounds.end };
     }
 
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
