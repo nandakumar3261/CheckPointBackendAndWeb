@@ -198,6 +198,43 @@ const renderers = {
   `;
   },
 
+  images: () => `
+    ${sectionHead('Images', 'Upload site-visit photo evidence and review the photos you have submitted.')}
+
+    <div class="tabs" id="imagesTabs">
+      <button class="tab-btn active" data-tab="uploadImage" type="button">Upload Images</button>
+      <button class="tab-btn" data-tab="getImages" type="button">Get Images</button>
+    </div>
+
+    <div class="tab-panel" id="tab-uploadImage">
+      <div class="card" style="max-width:420px;">
+        <div class="image-tile" style="margin-bottom:14px;"><div class="ph" style="height:160px;">🖼</div></div>
+        <input type="file" id="imageFileInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-outline" id="pickImgBtn" style="flex:1;">Pick Image</button>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Comment <span style="color:var(--amber);">*</span></label>
+          <textarea id="imageCommentInput" rows="3" maxlength="500" placeholder="Describe what this photo shows (required, min 3 characters)"></textarea>
+          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+            <span id="imageCommentCount" style="font-size:11px; color:var(--ink-500);">0 / 500</span>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="uploadImgBtn" style="width:100%;" disabled>Upload</button>
+        <div class="error-text" id="imageUploadError"></div>
+        <p style="color:var(--ink-500); font-size:11.5px; margin-top:8px;">
+          Accepted formats: JPG, JPEG, PNG only. Size must be between 10 KB and 2 MB. Comment must be 3-500 characters.
+        </p>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-getImages" style="display:none;">
+      <div class="image-grid" id="myImagesGrid">
+        <p style="color:var(--ink-500); font-size:13px;">Loading your images...</p>
+      </div>
+    </div>
+  `,
+
   logs: () => `
     ${sectionHead('Logs/Data', 'Every sub place assigned to you, and whether it was scanned.')}
     <div class="card">
