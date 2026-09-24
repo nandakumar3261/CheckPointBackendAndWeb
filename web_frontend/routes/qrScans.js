@@ -68,9 +68,15 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/qr-scans/mine?guardEmpId=2758
+// GET /api/qr-scans/mine?guardEmpId=2758&date=YYYY-MM-DD
 // One guard's own scan history, most recent first - the mobile app's
-// "Get QR Code Data" screen for a logged-in guard (or admin).
+// "Get QR Code Data" screen and the web guard panel's "Logs/Data" tab.
+//   date - optional, "YYYY-MM-DD" = the DUTY date. Returns every scan made
+//          on the duty that starts that day (DutyAssignment.dutyDate is "the
+//          day the overnight shift starts"), so a 6 PM - 6 AM shift keeps
+//          its after-midnight scans under the day it began - the same rule
+//          the admin's date picker (/coverage) uses. Leave it out for the
+//          guard's full history ("All").
 router.get('/mine', async (req, res) => {
   try {
     // typeof check: Express parses ?guardEmpId[$ne]=x into an object, which
@@ -79,7 +85,29 @@ router.get('/mine', async (req, res) => {
     if (!guardEmpId) {
       return res.status(400).json({ error: 'guardEmpId is required.' });
     }
-    const data = await QrScan.find({ guardEmpId }).sort({ scannedAt: -1 }).lean();
+
+    const filter = { guardEmpId };
+
+    const dateStr = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+    if (dateStr) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return res.status(400).json({ error: 'Invalid date. Use YYYY-MM-DD.' });
+      }
+      const bounds = dayBoundsUTC(dateStr);
+      if (!bounds) {
+        return res.status(400).json({ error: 'Invalid date.' });
+      }
+      const assignments = await DutyAssignment.find({
+        guardEmpId,
+        dutyDate: { $gte: bounds.start, $lt: bounds.end },
+      }).select('_id').lean();
+      if (assignments.length === 0) {
+        return res.json({ data: [], total: 0 });
+      }
+      filter.assignmentId = { $in: assignments.map((a) => a._id) };
+    }
+
+    const data = await QrScan.find(filter).sort({ scannedAt: -1 }).lean();
     res.json({ data, total: data.length });
   } catch (err) {
     console.error(err);
@@ -88,7 +116,11 @@ router.get('/mine', async (req, res) => {
 });
 
 // GET /api/qr-scans/coverage?date=YYYY-MM-DD&guardEmpId=2758
-//   date        - required, "YYYY-MM-DD"; which calendar day's duties to check
+//   date        - "YYYY-MM-DD"; which calendar day's duties to check.
+//                 Required, EXCEPT when guardEmpId is given - then leaving it
+//                 out returns that guard's duties for every day up to and
+//                 including today (newest first), which is the guard panel's
+//                 Logs/Data "All" view. Upcoming duties are not included.
 //   guardEmpId  - optional; when given, only that guard's own duty for the
 //                 day (the mobile app's guard "Get QR Code Data" screen).
 //                 When omitted, every duty assigned that day (the admin
@@ -102,23 +134,25 @@ router.get('/mine', async (req, res) => {
 router.get('/coverage', async (req, res) => {
   try {
     const dateStr = (req.query.date || '').trim();
-    if (!dateStr) {
-      return res.status(400).json({ error: 'date is required (YYYY-MM-DD).' });
-    }
-    const bounds = dayBoundsUTC(dateStr);
-    if (!bounds) {
-      return res.status(400).json({ error: 'Invalid date.' });
-    }
-
-    const filter = { dutyDate: { $gte: bounds.start, $lt: bounds.end } };
     // typeof check: Express parses ?guardEmpId[$ne]=x into an object, which
     // would otherwise be passed straight into the Mongo query.
     const guardEmpId = typeof req.query.guardEmpId === 'string' ? req.query.guardEmpId.trim() : '';
-    if (guardEmpId) {
-      filter.guardEmpId = guardEmpId;
+
+    let filter;
+    if (dateStr) {
+      const bounds = dayBoundsUTC(dateStr);
+      if (!bounds) {
+        return res.status(400).json({ error: 'Invalid date.' });
+      }
+      filter = { dutyDate: { $gte: bounds.start, $lt: bounds.end } };
+      if (guardEmpId) filter.guardEmpId = guardEmpId;
+    } else if (guardEmpId) {
+      filter = { guardEmpId, dutyDate: { $lt: todayBoundsUTC().end } };
+    } else {
+      return res.status(400).json({ error: 'date is required (YYYY-MM-DD).' });
     }
 
-    const assignments = await DutyAssignment.find(filter).sort({ mainPlace: 1 }).lean();
+    const assignments = await DutyAssignment.find(filter).sort({ dutyDate: -1, mainPlace: 1 }).lean();
     if (assignments.length === 0) {
       return res.json({ data: [], total: 0 });
     }
@@ -146,6 +180,7 @@ router.get('/coverage', async (req, res) => {
         guardName: a.guardName,
         mainPlace: a.mainPlace,
         dateRange: a.dateRange,
+        dutyDate: a.dutyDate,
         subPlaces: a.subPlaces.map((name) => {
           const scanTimes = bySubPlace.get(name) || [];
           return { name, scanned: scanTimes.length > 0, scans: scanTimes };

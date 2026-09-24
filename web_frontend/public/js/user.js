@@ -1,11 +1,9 @@
 const user = requireRole('security');
-const myLabel = user ? `${user.first_name} ( ${user.roll_no} )` : '';
 
 const titles = {
   home: 'Home',
   images: 'Images',
-  getQrData: 'Get QR Code Data',
-  myDuties: 'My Duties',
+  logs: 'Logs/Data',
   profile: 'Update Profile Pic',
   contact: 'Contact Us',
 };
@@ -50,7 +48,7 @@ document.getElementById('menuToggle').addEventListener('click', () => {
 // Sections that show the guard's live duty assignments from MongoDB. Every
 // time the guard opens one of these, duties are re-fetched, so a duty the
 // admin assigns while the guard is logged in shows up on the next visit.
-const DUTY_SECTIONS = ['home', 'myDuties'];
+const DUTY_SECTIONS = ['home'];
 let currentSection = 'home';
 
 const dutyState = { loaded: false, error: null, data: [] };
@@ -168,17 +166,21 @@ function staleWarning() {
     : '';
 }
 
-function myScans() {
-  const mine = MOCK.scans.filter(s => s.guardLabel === myLabel);
-  return mine.length ? mine : MOCK.scans; // demo fallback
+// "YYYY-MM-DD" for today in the browser's local time.
+function todayISODate() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 const renderers = {
   home: () => {
-    const { today, upcoming } = splitDuties();
+    const { today, upcoming, completed } = splitDuties();
     const scheduled = today.length + upcoming.length;
-    const highlight = today.length ? today : upcoming.slice(0, 1);
-    const highlightTitle = today.length ? "Today's duty" : 'Next duty';
+    const group = (label, list) => list.length
+      ? `<div class="card-title" style="margin:18px 0 10px;">${label} (${list.length})</div>${list.map(dutyCard).join('')}`
+      : '';
 
     return `
     ${sectionHead('Welcome back, ' + esc(user.first_name.split(' ')[0]), esc(user.designation) + ' • Roll No ' + esc(user.roll_no))}
@@ -186,78 +188,37 @@ const renderers = {
       <div class="stat-card"><div class="num">${dutyState.loaded ? scheduled : '…'}</div><div class="label">Duty assignment(s) scheduled</div></div>
       <div class="stat-card"><div class="num">6PM–6AM</div><div class="label">QR scan window</div></div>
     </div>
-    ${staleWarning()}
-    ${dutyPlaceholder() || (highlight.length
-      ? `<div class="card-title" style="margin-bottom:10px;">${highlightTitle}</div>${highlight.map(dutyCard).join('')}`
-      : '<div class="card"><p style="color:var(--ink-300); font-size:13.5px;">You have no upcoming duties. Past duties are listed under My Duties.</p></div>')}
     <div class="card">
       <div class="card-title">Reminder</div>
       <p style="color:var(--ink-300); font-size:13.5px;">QR scanning is only accepted between 6:00 PM and 6:00 AM. Scans outside this window will be rejected.</p>
     </div>
-  `;
-  },
-
-  images: () => `
-    ${sectionHead('Images', 'Upload site-visit photo evidence and review the photos you have submitted.')}
-
-    <div class="tabs" id="imagesTabs">
-      <button class="tab-btn active" data-tab="uploadImage" type="button">Upload Images</button>
-      <button class="tab-btn" data-tab="getImages" type="button">Get Images</button>
-    </div>
-
-    <div class="tab-panel" id="tab-uploadImage">
-      <div class="card" style="max-width:420px;">
-        <div class="image-tile" style="margin-bottom:14px;"><div class="ph" style="height:160px;">🖼</div></div>
-        <input type="file" id="imageFileInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
-        <div style="display:flex; gap:10px;">
-          <button class="btn btn-outline" id="pickImgBtn" style="flex:1;">Pick Image</button>
-        </div>
-        <div class="field" style="margin-top:14px;">
-          <label>Comment <span style="color:var(--amber);">*</span></label>
-          <textarea id="imageCommentInput" rows="3" maxlength="500" placeholder="Describe what this photo shows (required, min 3 characters)"></textarea>
-          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
-            <span id="imageCommentCount" style="font-size:11px; color:var(--ink-500);">0 / 500</span>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="uploadImgBtn" style="width:100%;" disabled>Upload</button>
-        <div class="error-text" id="imageUploadError"></div>
-        <p style="color:var(--ink-500); font-size:11.5px; margin-top:8px;">
-          Accepted formats: JPG, JPEG, PNG only. Size must be between 10 KB and 2 MB. Comment must be 3-500 characters.
-        </p>
-      </div>
-    </div>
-
-    <div class="tab-panel" id="tab-getImages" style="display:none;">
-      <div class="image-grid" id="myImagesGrid">
-        <p style="color:var(--ink-500); font-size:13px;">Loading your images...</p>
-      </div>
-    </div>
-  `,
-
-  getQrData: () => `
-    ${sectionHead('Get QR Code Data', 'Your attendance scan history.')}
-    <div class="card">
-      <table>
-        <thead><tr><th>Place</th><th>Timestamp</th><th>Date Range</th></tr></thead>
-        <tbody>
-          ${myScans().map(s => `<tr><td>${s.scannedPlace}</td><td>${s.timestamp}</td><td>${s.dateRange}</td></tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  `,
-
-  myDuties: () => {
-    const { today, upcoming, completed } = splitDuties();
-    const group = (label, list) => list.length
-      ? `<div class="card-title" style="margin:18px 0 10px;">${label} (${list.length})</div>${list.map(dutyCard).join('')}`
-      : '';
-
-    return `
-    ${sectionHead('My Duties', 'Duties your admin has assigned to you.')}
+    <div class="section-head" style="margin:26px 0 4px;"><h2>My Duties</h2><p>Duties your admin has assigned to you.</p></div>
     ${staleWarning()}
     ${dutyPlaceholder() || (group('Today', today) + group('Upcoming', upcoming) + group('Completed', completed))}
   `;
   },
+
+  logs: () => `
+    ${sectionHead('Logs/Data', 'Every sub place assigned to you, and whether it was scanned.')}
+    <div class="card">
+      <div class="data-toolbar">
+        <div class="toolbar-right" style="margin-left:0; gap:10px; flex-wrap:wrap;">
+          <select id="logsFilter">
+            <option value="date" selected>Date</option>
+            <option value="all">All</option>
+          </select>
+          <input type="date" id="logsDate" value="${todayISODate()}" max="${todayISODate()}">
+        </div>
+        <div class="toolbar-right" style="margin-left:auto;">
+          <span id="logsSummary" style="font-size:12.5px; color:var(--ink-500);"></span>
+          <button class="btn btn-outline" id="downloadLogsPdfBtn" type="button" style="width:auto; padding:9px 16px;" disabled>⬇ Download PDF</button>
+        </div>
+      </div>
+      <div class="table-scroll" id="logsTableWrap">
+        <p style="color:var(--ink-500); font-size:13px; padding:8px 0;">Loading...</p>
+      </div>
+    </div>
+  `,
 
   profile: () => `
     ${sectionHead('Update Profile Pic', 'View your details and update your photo.')}
@@ -332,6 +293,186 @@ function attachHandlers(section) {
         picInput.value = '';
       }
     });
+  }
+
+  if (section === 'logs') {
+    const filterSel = document.getElementById('logsFilter');
+    const dateInput = document.getElementById('logsDate');
+    const wrap = document.getElementById('logsTableWrap');
+    const summary = document.getElementById('logsSummary');
+    const pdfBtn = document.getElementById('downloadLogsPdfBtn');
+    let logsSeq = 0; // ignore out-of-order responses if the filter changes quickly
+    let loaded = { duties: [], byDate: true, date: '' }; // what's on screen right now, for the PDF
+
+    // "22/09/2026, 10:52 am"
+    function fmtDateTime(iso) {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleString('en-IN', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    }
+
+    // One serial number per duty (Main Place + Duty Date Range, merged cells),
+    // with EVERY sub place assigned to the guard numbered underneath, each
+    // marked Scanned / Not scanned and every scan time stacked in its Scanned
+    // At cell. Shared by the on-screen table and the PDF.
+    function groupLogRows(duties) {
+      const rows = [];
+      duties.forEach((g, gi) => {
+        const subs = (g.subPlaces || []).map(sp => ({
+          name: sp.name,
+          scanned: !!sp.scanned,
+          times: (sp.scans || []).slice().sort((x, y) => new Date(x) - new Date(y)),
+        }));
+        subs.forEach((sub, i) => rows.push({ group: g, groupIndex: gi + 1, span: subs.length, first: i === 0, subIndex: i + 1, sub }));
+      });
+      return rows;
+    }
+
+    function buildLogsTable(duties) {
+      const rows = groupLogRows(duties);
+
+      const body = rows.map(r => {
+        const zebra = r.groupIndex % 2 === 0 ? ' style="background:rgba(255,255,255,0.025);"' : '';
+        const merged = r.first
+          ? `<td class="serial-col" rowspan="${r.span}" style="vertical-align:top;">${r.groupIndex}</td>
+             <td class="preserve-space" rowspan="${r.span}" style="vertical-align:top;">${esc(r.group.mainPlace)}</td>
+             <td rowspan="${r.span}" style="vertical-align:top; white-space:nowrap;">${esc(prettyRange(r.group.dateRange))}</td>`
+          : '';
+        return `<tr${zebra}>${merged}
+          <td class="serial-col">${r.subIndex}</td>
+          <td class="preserve-space">${esc(r.sub.name)}</td>
+          <td style="white-space:nowrap;"><span class="badge ${r.sub.scanned ? 'badge-success' : 'badge-neutral'}">${r.sub.scanned ? 'Scanned' : 'Not scanned'}</span></td>
+          <td style="white-space:nowrap;">${r.sub.scanned ? r.sub.times.map(fmtDateTime).join('<br>') : '—'}</td>
+        </tr>`;
+      }).join('');
+
+      return `
+        <table class="recent-scans-table" style="min-width:1020px;">
+          <colgroup>
+            <col style="width:56px;"><col style="width:190px;"><col style="width:190px;">
+            <col style="width:64px;"><col style="width:240px;"><col style="width:130px;"><col style="width:170px;">
+          </colgroup>
+          <thead><tr>
+            <th class="serial-col">#</th><th>Main Place</th><th>Duty Date Range</th>
+            <th class="serial-col">Sub #</th><th>Sub Place</th><th>Status</th><th>Scanned At</th>
+          </tr></thead>
+          <tbody>${body}</tbody>
+        </table>`;
+    }
+    function prettyDateStr(iso) {
+      const [y, m, d] = iso.split('-');
+      return `${d}-${m}-${y}`;
+    }
+
+    async function loadLogs() {
+      const seq = ++logsSeq;
+      const byDate = filterSel.value === 'date';
+      dateInput.style.display = byDate ? '' : 'none'; // "All" -> no date picker
+
+      // Date mode needs a valid date: an empty/partial picker falls back to
+      // today, and a future date is clamped to today.
+      if (byDate) {
+        const v = dateInput.value;
+        const valid = /^\d{4}-\d{2}-\d{2}$/.test(v) && Number(v.slice(0, 4)) >= 2000;
+        if (!valid || v > todayISODate()) dateInput.value = todayISODate();
+      }
+      const date = byDate ? dateInput.value : '';
+
+      wrap.innerHTML = '<p style="color:var(--ink-500); font-size:13px; padding:8px 0;">Loading...</p>';
+      summary.textContent = '';
+      pdfBtn.disabled = true;
+      loaded = { duties: [], byDate, date };
+      try {
+        // Every sub place assigned to this guard, tagged scanned / not scanned.
+        const { data } = await fetchQrScanCoverageViaApi({ guardEmpId: user.roll_no, date });
+        if (seq !== logsSeq) return;
+
+        loaded = { duties: data, byDate, date };
+        pdfBtn.disabled = data.length === 0;
+
+        const allSubs = data.flatMap(d => d.subPlaces || []);
+        const scannedCount = allSubs.filter(sp => sp.scanned).length;
+        summary.textContent = `${scannedCount} of ${allSubs.length} sub place${allSubs.length === 1 ? '' : 's'} scanned • ${byDate ? 'Duty ' + prettyDateStr(date) : 'All dates'}`;
+
+        if (data.length === 0) {
+          wrap.innerHTML = `<p style="color:var(--ink-300); font-size:13.5px; padding:8px 0;">${
+            byDate ? 'No duty was assigned to you for ' + esc(prettyDateStr(date)) + '.' : 'No duties have been assigned to you yet.'
+          }</p>`;
+          return;
+        }
+
+        wrap.innerHTML = buildLogsTable(data);
+      } catch (err) {
+        if (seq !== logsSeq) return;
+        wrap.innerHTML = `<p style="color:var(--danger); font-size:13px; padding:8px 0;">${esc(err.message || 'Could not load your logs.')}</p>
+          <button class="btn btn-outline" id="retryLogsBtn" style="width:auto; padding:8px 18px;">Retry</button>`;
+        document.getElementById('retryLogsBtn').addEventListener('click', loadLogs);
+      }
+    }
+
+    filterSel.addEventListener('change', loadLogs);
+
+    // Typing a date fires "change" for every intermediate year (0002, 0020,
+    // 0202, 2026...), so wait for the typing to settle and skip incomplete
+    // years instead of querying each one. Picking from the calendar loads
+    // immediately.
+    let dateTimer = null;
+    dateInput.addEventListener('change', () => {
+      clearTimeout(dateTimer);
+      const v = dateInput.value;
+      const complete = /^\d{4}-\d{2}-\d{2}$/.test(v) && Number(v.slice(0, 4)) >= 2000;
+      if (v && !complete) return; // still typing the year
+      dateTimer = setTimeout(loadLogs, 200);
+    });
+    // ---------- Download PDF: mirrors the on-screen table (merged cells) ----------
+    pdfBtn.addEventListener('click', () => {
+      if (!loaded.duties.length) {
+        alert('Nothing to export.');
+        return;
+      }
+      if (typeof jspdf === 'undefined' || !jspdf.jsPDF) {
+        alert('The PDF export library did not load. Check your internet connection and try again.');
+        return;
+      }
+
+      const rows = groupLogRows(loaded.duties);
+      const body = rows.map(r => {
+        const row = [];
+        if (r.first) {
+          row.push({ content: String(r.groupIndex), rowSpan: r.span, styles: { valign: 'top' } });
+          row.push({ content: r.group.mainPlace, rowSpan: r.span, styles: { valign: 'top' } });
+          // Plain "to" - the PDF's built-in font has no arrow glyph.
+          row.push({ content: String(r.group.dateRange || '').replace('_', ' to '), rowSpan: r.span, styles: { valign: 'top' } });
+        }
+        row.push(String(r.subIndex));
+        row.push(r.sub.name);
+        row.push(r.sub.scanned ? 'Scanned' : 'Not scanned');
+        row.push(r.sub.scanned ? r.sub.times.map(fmtDateTime).join('\n') : '-');
+        return row;
+      });
+
+      const scope = loaded.byDate ? `Duty date ${prettyDateStr(loaded.date)}` : 'All dates';
+      const doc = new jspdf.jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(14);
+      doc.text(`Logs/Data - ${user.first_name} (${user.roll_no})`, 14, 15);
+      doc.setFontSize(10);
+      const pdfSubs = loaded.duties.flatMap(d => d.subPlaces || []);
+      doc.text(`${scope}  |  ${pdfSubs.filter(sp => sp.scanned).length} of ${pdfSubs.length} sub places scanned`, 14, 21);
+      doc.autoTable({
+        startY: 26,
+        theme: 'grid',
+        head: [['#', 'Main Place', 'Duty Date Range', 'Sub #', 'Sub Place', 'Status', 'Scanned At']],
+        body,
+        styles: { fontSize: 8, lineWidth: 0.1, lineColor: [38, 56, 90] },
+        headStyles: { fillColor: [18, 33, 58] },
+      });
+      doc.save(`logs_${user.roll_no}_${loaded.byDate ? loaded.date : 'all'}.pdf`);
+    });
+
+    loadLogs(); // default: today's date
   }
 
   if (section === 'images') {

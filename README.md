@@ -28,8 +28,8 @@ Android Studio / VS Code / run via `flutter run`).
 **What's included:**
 - Splash screen → Login (`lib/screens/login_screen.dart`) using static users in `lib/data/mock_data.dart`
 - Role-based routing to **Admin** (`lib/screens/admin/`) or **Guard** (`lib/screens/user/`) shells
-- Admin: Home, Scan QR, Get QR Data, Upload/Get Images, Add/Get Security, Add Duty Places, Assign Duty, Show/Delete Assigned Duties, Duty Finished Status (with progress bars + simulated PDF export), Profile, Contact — 14 sections, full parity with the original nav drawer
-- Guard: Home, Images (tabs: Upload Images / Get Images — the latter shows only that guard's own photos), Get QR Data, My Duties, Profile (with photo upload), Contact. The sidebar header shows the logged-in guard's name and profile photo.
+- Admin: Home, Scan QR, Logs/Data (every sub place assigned to the guard as a table with Scanned / Not scanned status, filter: Date — defaults to today — or All; with a Download PDF button), Upload/Get Images, Add/Get Security, Add Duty Places, Assign Duty, Show/Delete Assigned Duties, Duty Finished Status (with progress bars + simulated PDF export), Profile, Contact — 14 sections, full parity with the original nav drawer
+- Guard: Home (stats, reminder and the My Duties list: Today / Upcoming / Completed), Images (tabs: Upload Images / Get Images — the latter shows only that guard's own photos), Get QR Data, Profile (with photo upload), Contact. The sidebar header shows the logged-in guard's name and profile photo.
 - Night-shift navy + amber theme (`lib/theme.dart`)
 
 **Demo logins:** `admin` / `admin123` (admin), `2758` / `guard@123` (guard)
@@ -182,6 +182,8 @@ passwords directly.
 - `server.js` — Express server; connects to MongoDB on startup via `config/db.js`, then mounts:
   - `POST /api/auth/login` — checks roll_no/password against MongoDB, and rejects blocked accounts
   - `GET /api/users?role=&search=&page=&limit=` — paginated, searchable list of accounts (search matches name, roll no, mobile, **and designation**)
+  - `GET /api/qr-scans/coverage?date=&guardEmpId=` — per-duty sub places tagged scanned/not scanned; with `guardEmpId` and no `date` it returns that guard's duties up to today (Logs/Data "All")
+  - `GET /api/qr-scans/mine?guardEmpId=&date=YYYY-MM-DD` — one guard's scans; optional `date` = the duty date (all scans of the shift that starts that day); omit for all
   - `GET /api/users/by-roll/:roll_no` — one account by exact roll number (no password hash); used by the Flutter app's Profile screen
   - `POST /api/users/by-roll/:roll_no/profile-pic` — multipart upload (field `image`, JPG/PNG, max 2 MB); saves to `public/uploads/profile/` and stores the URL in `profile_pic`
   - `POST /api/users` — create a single account (used by the "Add Security" tab)

@@ -212,6 +212,18 @@ async function fetchQrScansViaApi({ search, date, page = 1, limit = 10 } = {}) {
 }
 
 /**
+ * One guard's own scans (GET /api/qr-scans/mine). Pass date ("YYYY-MM-DD") for the
+ * duty that starts on that day, or leave it out for everything.
+ */
+async function fetchMyQrScansViaApi({ guardEmpId, date } = {}) {
+  const params = new URLSearchParams();
+  params.set('guardEmpId', guardEmpId);
+  if (date) params.set('date', date);
+  const res = await fetch(`/api/qr-scans/mine?${params.toString()}`);
+  return readJsonResponse(res); // { data, total }
+}
+
+/**
  * Per-guard scan coverage for a given date (see GET /api/qr-scans/coverage).
  * One entry per guard who has a duty assigned that day, with every one of
  * their sub places tagged as scanned/not-scanned (plus every scan
