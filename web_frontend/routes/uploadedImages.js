@@ -160,13 +160,19 @@ router.post('/', upload.single('image'), async (req, res) => {
   }
 });
 
-// GET /api/uploaded-images?search=&page=1&limit=20
-//   search - optional, matches guard name or employee ID
-// Every photo submitted by every guard/admin, most recent first - the
-// "Get Upload Images" tab.
+// GET /api/uploaded-images?search=&guardEmpId=&page=1&limit=20
+//   search     - optional, matches guard name, employee ID or comment
+//   guardEmpId - optional, exact employee ID. When present only that
+//                guard's photos come back - the guard panel's "Get Images"
+//                tab always sends it, so a guard never sees anyone else's.
+// Without guardEmpId: every photo from every guard/admin, most recent
+// first - the admin's "Get Upload Images" tab.
 router.get('/', async (req, res) => {
   try {
     const filter = {};
+    const guardEmpId = String(req.query.guardEmpId || '').trim();
+    if (guardEmpId) filter.guardEmpId = guardEmpId;
+
     const search = (req.query.search || '').trim();
     if (search) {
       const re = new RegExp(escapeRegex(search), 'i');

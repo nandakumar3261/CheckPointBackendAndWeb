@@ -246,12 +246,29 @@ async function uploadImageViaApi({ file, comment, guardEmpId, guardName }) {
   return readJsonResponse(res);
 }
 
-async function fetchUploadedImagesViaApi({ search, page = 1, limit = 20 } = {}) {
+// Pass guardEmpId to get only that guard's images (guard panel); leave it out
+// for everyone's images (admin panel).
+async function fetchUploadedImagesViaApi({ search, guardEmpId, page = 1, limit = 20 } = {}) {
   const params = new URLSearchParams();
   if (search) params.set('search', search);
+  if (guardEmpId) params.set('guardEmpId', guardEmpId);
   params.set('page', page);
   params.set('limit', limit);
 
   const res = await fetch(`/api/uploaded-images?${params.toString()}`);
   return readJsonResponse(res); // { data, total, page, limit, totalPages }
+}
+
+/**
+ * Guard profile photo. Sent as multipart/form-data; returns { profile_pic }
+ * (the public URL of the saved photo).
+ */
+async function uploadProfilePicViaApi(rollNo, file) {
+  const formData = new FormData();
+  formData.append('image', file);
+  const res = await fetch(`/api/users/by-roll/${encodeURIComponent(rollNo)}/profile-pic`, {
+    method: 'POST',
+    body: formData,
+  });
+  return readJsonResponse(res);
 }

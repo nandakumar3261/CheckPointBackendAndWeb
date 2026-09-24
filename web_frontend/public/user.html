@@ -10,15 +10,17 @@
 
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-mark" style="width:34px;height:34px;font-size:15px;">AS</div>
-      <span>GUARD PANEL</span>
+    <div class="brand guard-brand">
+      <div class="avatar avatar-lg" id="sidebarAvatar"></div>
+      <div class="guard-brand-text">
+        <span class="guard-name" id="sidebarName"></span>
+        <small id="sidebarSub"></small>
+      </div>
     </div>
 
     <div class="nav-group-label">Duty</div>
     <div class="nav-link active" data-section="home">Home</div>
-    <div class="nav-link" data-section="scanQr">Scan QR Code</div>
-    <div class="nav-link" data-section="uploadImages">Upload Images</div>
+    <div class="nav-link" data-section="images">Images</div>
     <div class="nav-link" data-section="getQrData">Get QR Code Data</div>
     <div class="nav-link" data-section="myDuties">My Duties</div>
 
@@ -44,6 +46,10 @@
     </div>
     <div class="content" id="content"></div>
   </main>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" style="display:none;">
+  <div class="modal-box" id="modalBox"></div>
 </div>
 
 <script src="js/data.js"></script>

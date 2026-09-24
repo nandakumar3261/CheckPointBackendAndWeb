@@ -33,6 +33,7 @@ router.post('/login', async (req, res) => {
       designation: user.designation,
       mobile: user.mobile,
       role: user.role,
+      profile_pic: user.profile_pic || '',
     });
   } catch (err) {
     console.error(err);

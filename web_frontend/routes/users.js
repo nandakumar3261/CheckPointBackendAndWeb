@@ -1,5 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const User = require('../models/User');
 
 const router = express.Router();
@@ -62,11 +65,99 @@ router.get('/by-roll/:roll_no', async (req, res) => {
       mobile: user.mobile,
       role: user.role,
       blocked: user.blocked,
+      profile_pic: user.profile_pic || '',
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error fetching user.' });
   }
+});
+
+// ---------------------------------------------------------------------
+// Profile photo: POST /api/users/by-roll/:roll_no/profile-pic  (multipart, field "image")
+// JPG/PNG only, max 2 MB. Saved under public/uploads/profile (served by
+// express.static) and the URL is stored on the user as profile_pic.
+// ---------------------------------------------------------------------
+const PROFILE_DIR = path.join(__dirname, '..', 'public', 'uploads', 'profile');
+fs.mkdirSync(PROFILE_DIR, { recursive: true });
+
+const PROFILE_MAX_SIZE = 2 * 1024 * 1024; // 2 MB
+const PROFILE_EXTENSIONS = ['.jpg', '.jpeg', '.png'];
+const JPEG_SIG = Buffer.from([0xff, 0xd8, 0xff]);
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+function isGenuineImage(filePath) {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(8);
+    fs.readSync(fd, buf, 0, 8, 0);
+    return buf.subarray(0, 3).equals(JPEG_SIG) || buf.equals(PNG_SIG);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function removeFileQuietly(filePath) {
+  fs.unlink(filePath, () => {});
+}
+
+const profileUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, PROFILE_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const safeRoll = String(req.params.roll_no).replace(/[^a-zA-Z0-9_-]/g, '');
+      cb(null, `${safeRoll}_${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: PROFILE_MAX_SIZE },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!PROFILE_EXTENSIONS.includes(ext)) {
+      return cb(new Error('Only JPG, JPEG or PNG images are allowed.'));
+    }
+    cb(null, true);
+  },
+}).single('image');
+
+router.post('/by-roll/:roll_no/profile-pic', (req, res) => {
+  profileUpload(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      const msg = uploadErr.code === 'LIMIT_FILE_SIZE'
+        ? 'Image is too large. Maximum size is 2 MB.'
+        : uploadErr.message || 'Could not upload the image.';
+      return res.status(400).json({ error: msg });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'Please choose an image to upload.' });
+    }
+
+    try {
+      if (!isGenuineImage(req.file.path)) {
+        removeFileQuietly(req.file.path);
+        return res.status(400).json({ error: 'This file is not a valid JPG or PNG image.' });
+      }
+
+      const user = await User.findOne({ roll_no: String(req.params.roll_no).trim() });
+      if (!user) {
+        removeFileQuietly(req.file.path);
+        return res.status(404).json({ error: 'User not found.' });
+      }
+
+      // Remove the previous photo so old files don't pile up.
+      if (user.profile_pic && user.profile_pic.startsWith('/uploads/profile/')) {
+        removeFileQuietly(path.join(PROFILE_DIR, path.basename(user.profile_pic)));
+      }
+
+      user.profile_pic = `/uploads/profile/${req.file.filename}`;
+      await user.save();
+      res.json({ profile_pic: user.profile_pic });
+    } catch (err) {
+      console.error(err);
+      removeFileQuietly(req.file.path);
+      res.status(500).json({ error: 'Server error saving profile photo.' });
+    }
+  });
 });
 
 // POST /api/users  { roll_no, password, first_name, designation, mobile, role }

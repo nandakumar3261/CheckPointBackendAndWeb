@@ -29,7 +29,7 @@ Android Studio / VS Code / run via `flutter run`).
 - Splash screen → Login (`lib/screens/login_screen.dart`) using static users in `lib/data/mock_data.dart`
 - Role-based routing to **Admin** (`lib/screens/admin/`) or **Guard** (`lib/screens/user/`) shells
 - Admin: Home, Scan QR, Get QR Data, Upload/Get Images, Add/Get Security, Add Duty Places, Assign Duty, Show/Delete Assigned Duties, Duty Finished Status (with progress bars + simulated PDF export), Profile, Contact — 14 sections, full parity with the original nav drawer
-- Guard: Home, Scan QR, Upload Images, Get QR Data, My Duties, Profile, Contact
+- Guard: Home, Images (tabs: Upload Images / Get Images — the latter shows only that guard's own photos), Get QR Data, My Duties, Profile (with photo upload), Contact. The sidebar header shows the logged-in guard's name and profile photo.
 - Night-shift navy + amber theme (`lib/theme.dart`)
 
 **Demo logins:** `admin` / `admin123` (admin), `2758` / `guard@123` (guard)
@@ -183,6 +183,7 @@ passwords directly.
   - `POST /api/auth/login` — checks roll_no/password against MongoDB, and rejects blocked accounts
   - `GET /api/users?role=&search=&page=&limit=` — paginated, searchable list of accounts (search matches name, roll no, mobile, **and designation**)
   - `GET /api/users/by-roll/:roll_no` — one account by exact roll number (no password hash); used by the Flutter app's Profile screen
+  - `POST /api/users/by-roll/:roll_no/profile-pic` — multipart upload (field `image`, JPG/PNG, max 2 MB); saves to `public/uploads/profile/` and stores the URL in `profile_pic`
   - `POST /api/users` — create a single account (used by the "Add Security" tab)
   - `POST /api/users/bulk` — create many accounts from a parsed CSV (used by the "Add Security" tab's bulk upload); returns a per-row `inserted`/`skipped` summary so bad rows don't block good ones
   - `PUT /api/users/:id` — edit an account's name, designation, mobile, role, and optionally its password (roll_no stays fixed as the login key)

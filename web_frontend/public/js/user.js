@@ -3,16 +3,35 @@ const myLabel = user ? `${user.first_name} ( ${user.roll_no} )` : '';
 
 const titles = {
   home: 'Home',
-  scanQr: 'Scan QR Code',
-  uploadImages: 'Upload Images',
+  images: 'Images',
   getQrData: 'Get QR Code Data',
   myDuties: 'My Duties',
   profile: 'Update Profile Pic',
   contact: 'Contact Us',
 };
 
-document.getElementById('whoName').textContent = user ? user.first_name : '';
-document.getElementById('avatarInitial').textContent = user ? user.first_name.charAt(0) : '';
+// Fills an .avatar element with the guard's profile photo, or their first
+// letter when they haven't uploaded one yet.
+function fillAvatar(el) {
+  if (!el || !user) return;
+  if (user.profile_pic) {
+    el.innerHTML = `<img src="${esc(user.profile_pic)}" alt="${esc(user.first_name)}">`;
+  } else {
+    el.textContent = user.first_name.charAt(0);
+  }
+}
+
+// Sidebar header (name + photo) and the mobile topbar avatar.
+function paintIdentity() {
+  if (!user) return;
+  document.getElementById('sidebarName').textContent = user.first_name;
+  document.getElementById('sidebarSub').textContent = user.designation || 'Security Guard';
+  document.getElementById('whoName').textContent = user.first_name;
+  fillAvatar(document.getElementById('sidebarAvatar'));
+  fillAvatar(document.getElementById('avatarInitial'));
+}
+
+paintIdentity();
 
 document.querySelectorAll('.nav-link[data-section]').forEach(el => {
   el.addEventListener('click', () => {
@@ -75,6 +94,21 @@ function esc(v) {
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
 }
+
+function openModal(html, { maxWidth } = {}) {
+  const box = document.getElementById('modalBox');
+  box.innerHTML = html;
+  box.style.maxWidth = maxWidth || '';
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('modalOverlay').style.display = 'none';
+  document.getElementById('modalBox').innerHTML = '';
+  document.getElementById('modalBox').style.maxWidth = '';
+}
+document.getElementById('modalOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
 
 function sectionHead(title, sub) {
   return `<div class="section-head"><h2>${title}</h2><p>${sub}</p></div>`;
@@ -163,35 +197,40 @@ const renderers = {
   `;
   },
 
-  scanQr: () => `
-    ${sectionHead('Scan QR Code', 'Scan the QR code posted at your duty sub-place to log attendance.')}
-    <div class="card" style="max-width:420px; text-align:center;">
-      <div style="font-size:46px; margin-bottom:10px;">▦</div>
-      <button class="btn btn-primary" id="simulateScanBtn" style="width:auto; padding:12px 24px;">Scan QR Code</button>
-      <div id="scanResult" style="margin-top:16px;"></div>
-    </div>
-  `,
+  images: () => `
+    ${sectionHead('Images', 'Upload site-visit photo evidence and review the photos you have submitted.')}
 
-  uploadImages: () => `
-    ${sectionHead('Upload Images', 'Submit a photo as proof of your site visit.')}
-    <div class="card" style="max-width:420px;">
-      <div class="image-tile" style="margin-bottom:14px;"><div class="ph" style="height:160px;">🖼</div></div>
-      <input type="file" id="imageFileInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
-      <div style="display:flex; gap:10px;">
-        <button class="btn btn-outline" id="pickImgBtn" style="flex:1;">Pick Image</button>
-      </div>
-      <div class="field" style="margin-top:14px;">
-        <label>Comment <span style="color:var(--amber);">*</span></label>
-        <textarea id="imageCommentInput" rows="3" maxlength="500" placeholder="Describe what this photo shows (required, min 3 characters)"></textarea>
-        <div style="display:flex; justify-content:flex-end; margin-top:4px;">
-          <span id="imageCommentCount" style="font-size:11px; color:var(--ink-500);">0 / 500</span>
+    <div class="tabs" id="imagesTabs">
+      <button class="tab-btn active" data-tab="uploadImage" type="button">Upload Images</button>
+      <button class="tab-btn" data-tab="getImages" type="button">Get Images</button>
+    </div>
+
+    <div class="tab-panel" id="tab-uploadImage">
+      <div class="card" style="max-width:420px;">
+        <div class="image-tile" style="margin-bottom:14px;"><div class="ph" style="height:160px;">🖼</div></div>
+        <input type="file" id="imageFileInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-outline" id="pickImgBtn" style="flex:1;">Pick Image</button>
         </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Comment <span style="color:var(--amber);">*</span></label>
+          <textarea id="imageCommentInput" rows="3" maxlength="500" placeholder="Describe what this photo shows (required, min 3 characters)"></textarea>
+          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+            <span id="imageCommentCount" style="font-size:11px; color:var(--ink-500);">0 / 500</span>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="uploadImgBtn" style="width:100%;" disabled>Upload</button>
+        <div class="error-text" id="imageUploadError"></div>
+        <p style="color:var(--ink-500); font-size:11.5px; margin-top:8px;">
+          Accepted formats: JPG, JPEG, PNG only. Size must be between 10 KB and 2 MB. Comment must be 3-500 characters.
+        </p>
       </div>
-      <button class="btn btn-primary" id="uploadImgBtn" style="width:100%;" disabled>Upload</button>
-      <div class="error-text" id="imageUploadError"></div>
-      <p style="color:var(--ink-500); font-size:11.5px; margin-top:8px;">
-        Accepted formats: JPG, JPEG, PNG only. Size must be between 10 KB and 2 MB. Comment must be 3-500 characters.
-      </p>
+    </div>
+
+    <div class="tab-panel" id="tab-getImages" style="display:none;">
+      <div class="image-grid" id="myImagesGrid">
+        <p style="color:var(--ink-500); font-size:13px;">Loading your images...</p>
+      </div>
     </div>
   `,
 
@@ -223,13 +262,16 @@ const renderers = {
   profile: () => `
     ${sectionHead('Update Profile Pic', 'View your details and update your photo.')}
     <div class="card" style="max-width:420px; text-align:center;">
-      <div class="avatar" style="width:80px; height:80px; font-size:28px; margin:0 auto 16px;">${user.first_name.charAt(0)}</div>
-      <button class="btn btn-outline" style="width:auto; padding:8px 18px; margin-bottom:18px;">Change Photo</button>
+      <div class="avatar avatar-xl" id="profileAvatar" style="margin:0 auto 16px;"></div>
+      <input type="file" id="profilePicInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
+      <button class="btn btn-outline" id="changePhotoBtn" style="width:auto; padding:8px 18px; margin-bottom:8px;">Change Photo</button>
+      <div class="error-text" id="profilePicError"></div>
+      <p style="color:var(--ink-500); font-size:11.5px; margin-bottom:14px;">JPG or PNG, up to 2 MB.</p>
       <table style="text-align:left;">
-        <tr><td style="color:var(--ink-500);">Name</td><td>${user.first_name}</td></tr>
-        <tr><td style="color:var(--ink-500);">Designation</td><td>${user.designation}</td></tr>
-        <tr><td style="color:var(--ink-500);">Roll No</td><td>${user.roll_no}</td></tr>
-        <tr><td style="color:var(--ink-500);">Mobile</td><td>${user.mobile}</td></tr>
+        <tr><td style="color:var(--ink-500);">Name</td><td>${esc(user.first_name)}</td></tr>
+        <tr><td style="color:var(--ink-500);">Designation</td><td>${esc(user.designation)}</td></tr>
+        <tr><td style="color:var(--ink-500);">Roll No</td><td>${esc(user.roll_no)}</td></tr>
+        <tr><td style="color:var(--ink-500);">Mobile</td><td>${esc(user.mobile)}</td></tr>
       </table>
     </div>
   `,
@@ -248,16 +290,64 @@ function attachHandlers(section) {
   const retry = document.getElementById('retryDutiesBtn');
   if (retry) retry.addEventListener('click', () => render(section));
 
-  if (section === 'scanQr') {
-    document.getElementById('simulateScanBtn').addEventListener('click', () => {
-      const place = MOCK.dutyPlaces[1].subPlaces[0];
-      document.getElementById('scanResult').innerHTML = `
-        <div style="background:var(--navy-800); padding:12px; border-radius:8px; margin-bottom:10px;">Scanned data: <b>${place}</b></div>
-        <button class="btn btn-primary" style="width:auto; padding:8px 20px;" onclick="alert('Attendance recorded (simulated)')">Submit</button>`;
+  if (section === 'profile') {
+    fillAvatar(document.getElementById('profileAvatar'));
+
+    const picInput = document.getElementById('profilePicInput');
+    const changeBtn = document.getElementById('changePhotoBtn');
+    const picErr = document.getElementById('profilePicError');
+
+    changeBtn.addEventListener('click', () => picInput.click());
+
+    picInput.addEventListener('change', async () => {
+      picErr.textContent = '';
+      const file = picInput.files && picInput.files[0];
+      if (!file) return;
+
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      if (!['jpg', 'jpeg', 'png'].includes(ext)) {
+        picErr.textContent = 'Only JPG, JPEG or PNG images are allowed.';
+        picInput.value = '';
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        picErr.textContent = 'Image is too large. Maximum size is 2 MB.';
+        picInput.value = '';
+        return;
+      }
+
+      changeBtn.disabled = true;
+      changeBtn.textContent = 'Uploading...';
+      try {
+        const res = await uploadProfilePicViaApi(user.roll_no, file);
+        user.profile_pic = res.profile_pic;
+        setCurrentUser(user); // keep the session copy in sync
+        paintIdentity();
+        fillAvatar(document.getElementById('profileAvatar'));
+      } catch (err) {
+        picErr.textContent = err.message || 'Could not upload the photo.';
+      } finally {
+        changeBtn.disabled = false;
+        changeBtn.textContent = 'Change Photo';
+        picInput.value = '';
+      }
     });
   }
 
-  if (section === 'uploadImages') {
+  if (section === 'images') {
+    // ---------- Tab switching ----------
+    const imgTabNames = ['uploadImage', 'getImages'];
+    document.querySelectorAll('#imagesTabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#imagesTabs .tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        imgTabNames.forEach(t => {
+          document.getElementById('tab-' + t).style.display = (t === btn.dataset.tab) ? 'block' : 'none';
+        });
+        if (btn.dataset.tab === 'getImages') loadMyImages();
+      });
+    });
+
     // Same rules as admin.js's Upload Image tab (see routes/uploadedImages.js
     // for the server-side checks these mirror): jpg/jpeg/png only, 10 KB -
     // 2 MB, must actually decode as an image, and a 3-500 character comment
@@ -270,7 +360,7 @@ function attachHandlers(section) {
     const MAX_COMMENT_LENGTH = 500;
 
     const fileInput = document.getElementById('imageFileInput');
-    const previewTile = document.querySelector('#content .ph');
+    const previewTile = document.querySelector('#tab-uploadImage .ph');
     const pickBtn = document.getElementById('pickImgBtn');
     const commentInput = document.getElementById('imageCommentInput');
     const commentCount = document.getElementById('imageCommentCount');
@@ -401,6 +491,86 @@ function attachHandlers(section) {
         pickBtn.disabled = false;
       }
     });
+
+    // ======================================================================
+    // Tab: Get Images - only the photos THIS guard has uploaded (the server
+    // filters by guardEmpId), most recent first. Tap a thumbnail to open it
+    // full-size; each tile also has a Download button.
+    // ======================================================================
+    let myImagesById = new Map();
+
+    function imageDownloadName(img) {
+      const uploaded = new Date(img.uploadedAt || img.createdAt);
+      const stamp = isNaN(uploaded.getTime())
+        ? Date.now()
+        : uploaded.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const dot = img.imageUrl.lastIndexOf('.');
+      const ext = dot === -1 ? '.jpg' : img.imageUrl.slice(dot);
+      return `${img.guardEmpId}_${stamp}${ext}`;
+    }
+
+    function imageDateTime(img) {
+      const uploaded = new Date(img.uploadedAt || img.createdAt);
+      if (isNaN(uploaded.getTime())) return { dateStr: '—', timeStr: '' };
+      return {
+        dateStr: uploaded.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        timeStr: uploaded.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      };
+    }
+
+    function openMyImagePreview(id) {
+      const img = myImagesById.get(id);
+      if (!img) return;
+      const { dateStr, timeStr } = imageDateTime(img);
+      openModal(`
+        <div class="image-preview-modal">
+          <img src="${esc(img.imageUrl)}" alt="Your uploaded image">
+          <div class="meta">
+            <span>${dateStr} • ${timeStr}</span>
+            <p class="comment">"${esc(img.comment)}"</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="closePreviewBtn">Close</button>
+            <a class="btn btn-primary" style="width:auto; padding:10px 20px; text-decoration:none;" href="${esc(img.imageUrl)}" download="${esc(imageDownloadName(img))}">Download</a>
+          </div>
+        </div>
+      `, { maxWidth: '640px' });
+      document.getElementById('closePreviewBtn').addEventListener('click', closeModal);
+    }
+
+    async function loadMyImages() {
+      const grid = document.getElementById('myImagesGrid');
+      grid.innerHTML = '<p style="color:var(--ink-500); font-size:13px;">Loading your images...</p>';
+      try {
+        const { data } = await fetchUploadedImagesViaApi({ guardEmpId: user.roll_no, limit: 100 });
+        myImagesById = new Map(data.map(img => [img._id, img]));
+
+        if (data.length === 0) {
+          grid.innerHTML = '<p style="color:var(--ink-500); font-size:13px;">You have not uploaded any images yet.</p>';
+          return;
+        }
+        grid.innerHTML = data.map(img => {
+          const { dateStr, timeStr } = imageDateTime(img);
+          return `
+            <div class="image-tile">
+              <div class="ph viewable" style="height:140px;" data-img-id="${esc(img._id)}" title="Tap to view full size">
+                <img src="${esc(img.imageUrl)}" alt="Your uploaded image" style="width:100%; height:100%; object-fit:cover;">
+                <a class="dl-btn" href="${esc(img.imageUrl)}" download="${esc(imageDownloadName(img))}" title="Download" onclick="event.stopPropagation()">⬇</a>
+              </div>
+              <div class="meta">
+                <span>${dateStr} • ${timeStr}</span>
+                <p class="comment">"${esc(img.comment)}"</p>
+              </div>
+            </div>`;
+        }).join('');
+
+        grid.querySelectorAll('.ph.viewable').forEach(el => {
+          el.addEventListener('click', () => openMyImagePreview(el.dataset.imgId));
+        });
+      } catch (err) {
+        grid.innerHTML = `<p style="color:#e2574c; font-size:13px;">${esc(err.message || 'Could not load your images.')}</p>`;
+      }
+    }
   }
 }
 

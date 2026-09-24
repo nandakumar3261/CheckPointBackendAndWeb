@@ -20,6 +20,9 @@ const UserSchema = new Schema(
     mobile: { type: String, required: true },
     role: { type: String, enum: ['admin', 'security'], required: true },
     blocked: { type: Boolean, default: false },
+    // Public URL of the guard's profile photo (e.g. /uploads/profile/2758_123.jpg).
+    // Empty string = no photo yet, the UI falls back to the first-letter avatar.
+    profile_pic: { type: String, default: '' },
   },
   { timestamps: true }
 );
