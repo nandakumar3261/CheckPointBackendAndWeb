@@ -40,15 +40,6 @@ const MOCK = {
   // Uploaded images are no longer mock data - admin.js's Images section now
   // reads/writes real MongoDB documents via fetchUploadedImagesViaApi() /
   // uploadImageViaApi() in api.js (see routes/uploadedImages.js).
-
-  // Used by the admin dashboard's "Duty Finished Status" tab (still a
-  // placeholder - see renderers.dutyStatus in admin.js) and the guard-facing
-  // duty-status views.
-  dutyStatus: [
-    { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Ramesh Yadav ( 2758 )', place: 'Aditya Towers - Main Gate', total: 3, scanned: 2 },
-    { dateRange: '10-01-2024_11-01-2024', guardLabel: 'Suresh Pawar ( 3049 )', place: 'Warehouse Complex', total: 3, scanned: 1 },
-    { dateRange: '11-01-2024_12-01-2024', guardLabel: 'Vikram Singh ( 3105 )', place: 'Parking Structure', total: 3, scanned: 3 },
-  ],
 };
 
 function currentUser() {

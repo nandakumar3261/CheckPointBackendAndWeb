@@ -21,6 +21,16 @@ function todayBoundsUTC() {
 // Same as todayBoundsUTC() but for an arbitrary "YYYY-MM-DD" string, matching
 // routes/dutyAssignments.js's dayBoundsUTC() - used by /coverage to look up a
 // chosen date rather than always today. Returns null if dateStr is invalid.
+// "completed" / "today" / "upcoming" for a dutyDate - same rule as the admin
+// duty-assignments route.
+function dutyStatus(dutyDate) {
+  const bounds = todayBoundsUTC();
+  const d = new Date(dutyDate);
+  if (d < bounds.start) return 'completed';
+  if (d < bounds.end) return 'today';
+  return 'upcoming';
+}
+
 function dayBoundsUTC(dateStr) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
@@ -118,9 +128,10 @@ router.get('/mine', async (req, res) => {
 // GET /api/qr-scans/coverage?date=YYYY-MM-DD&guardEmpId=2758
 //   date        - "YYYY-MM-DD"; which calendar day's duties to check.
 //                 Required, EXCEPT when guardEmpId is given - then leaving it
-//                 out returns that guard's duties for every day up to and
-//                 including today (newest first), which is the guard panel's
-//                 Logs/Data "All" view. Upcoming duties are not included.
+//                 out returns EVERY duty ever assigned to that guard (past,
+//                 today and upcoming), each tagged with a "completed" /
+//                 "today" / "upcoming" status - the guard panel's Home page
+//                 "My Duties" table and Logs/Data "All" view.
 //   guardEmpId  - optional; when given, only that guard's own duty for the
 //                 day (the mobile app's guard "Get QR Code Data" screen).
 //                 When omitted, every duty assigned that day (the admin
@@ -147,7 +158,7 @@ router.get('/coverage', async (req, res) => {
       filter = { dutyDate: { $gte: bounds.start, $lt: bounds.end } };
       if (guardEmpId) filter.guardEmpId = guardEmpId;
     } else if (guardEmpId) {
-      filter = { guardEmpId, dutyDate: { $lt: todayBoundsUTC().end } };
+      filter = { guardEmpId }; // every duty this guard has - past, today and upcoming
     } else {
       return res.status(400).json({ error: 'date is required (YYYY-MM-DD).' });
     }
@@ -181,6 +192,7 @@ router.get('/coverage', async (req, res) => {
         mainPlace: a.mainPlace,
         dateRange: a.dateRange,
         dutyDate: a.dutyDate,
+        status: dutyStatus(a.dutyDate),
         subPlaces: a.subPlaces.map((name) => {
           const scanTimes = bySubPlace.get(name) || [];
           return { name, scanned: scanTimes.length > 0, scans: scanTimes };

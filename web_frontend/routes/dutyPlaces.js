@@ -58,6 +58,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/duty-places/stats
+// Two counts for the admin Home dashboard's "Main locations" and "Sub
+// places" cards, both read straight from the DutyPlace collection (the
+// master list of sites), not from DutyAssignment - so the numbers reflect
+// every sub-place that exists, whether or not a guard is currently assigned
+// to it.
+router.get('/stats', async (req, res) => {
+  try {
+    const [totalMainPlaces, subPlaceAgg] = await Promise.all([
+      DutyPlace.countDocuments({}),
+      DutyPlace.aggregate([
+        { $project: { subPlaceCount: { $size: { $ifNull: ['$subPlaces', []] } } } },
+        { $group: { _id: null, total: { $sum: '$subPlaceCount' } } },
+      ]),
+    ]);
+    const totalSubPlaces = subPlaceAgg.length ? subPlaceAgg[0].total : 0;
+    res.json({ totalMainPlaces, totalSubPlaces });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching duty place stats.' });
+  }
+});
+
 // GET /api/duty-places/options
 // Lightweight, unpaginated list (sorted alphabetically) used to populate the
 // "Add Sub Places" main-place dropdown and similar pickers.

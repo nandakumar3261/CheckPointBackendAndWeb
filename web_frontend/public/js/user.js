@@ -4,7 +4,6 @@ const titles = {
   home: 'Home',
   images: 'Images',
   logs: 'Logs/Data',
-  profile: 'Update Profile Pic',
   contact: 'Contact Us',
 };
 
@@ -19,11 +18,14 @@ function fillAvatar(el) {
   }
 }
 
-// Sidebar header (name + photo) and the mobile topbar avatar.
+// Sidebar header (name, designation, emp id, mobile + photo) - the guard's
+// own details, always visible top-left - and the mobile topbar avatar.
 function paintIdentity() {
   if (!user) return;
   document.getElementById('sidebarName').textContent = user.first_name;
-  document.getElementById('sidebarSub').textContent = user.designation || 'Security Guard';
+  document.getElementById('sidebarDesignation').textContent = user.designation || 'Security Guard';
+  document.getElementById('sidebarEmpId').textContent = `Emp ID: ${user.roll_no}`;
+  document.getElementById('sidebarMobile').textContent = user.mobile || '';
   document.getElementById('whoName').textContent = user.first_name;
   fillAvatar(document.getElementById('sidebarAvatar'));
   fillAvatar(document.getElementById('avatarInitial'));
@@ -58,7 +60,7 @@ async function loadMyDuties() {
   if (!user) return;
   const seq = ++dutyLoadSeq;
   try {
-    const res = await fetchMyDutiesViaApi(user.roll_no);
+    const res = await fetchQrScanCoverageViaApi({ guardEmpId: user.roll_no }); // every duty, with per-sub-place scanned status
     if (seq !== dutyLoadSeq) return;
     dutyState.data = res.data || [];
     dutyState.error = null;
@@ -77,6 +79,7 @@ function paint(section) {
 
 function render(section) {
   currentSection = section;
+  if (section === 'home') dutyPage = 1; // fresh visit -> start from page 1
   paint(section);
 
   if (DUTY_SECTIONS.includes(section)) {
@@ -113,12 +116,16 @@ function sectionHead(title, sub) {
 }
 
 // Today's duty first, then upcoming (soonest first), then completed (latest first).
+// The server returns duties newest-first (dutyDate descending). That's the
+// right order for "completed" (most recently finished duty on top), but
+// upcoming duties need the opposite - the soonest one next, not the
+// farthest-away one - so only upcoming gets reversed.
 function splitDuties() {
   const list = dutyState.data;
   return {
     today: list.filter(d => d.status === 'today'),
-    upcoming: list.filter(d => d.status === 'upcoming'),
-    completed: list.filter(d => d.status === 'completed').reverse(),
+    upcoming: list.filter(d => d.status === 'upcoming').reverse(),
+    completed: list.filter(d => d.status === 'completed'),
   };
 }
 
@@ -132,15 +139,82 @@ const STATUS_BADGE = {
   completed: '<span class="badge badge-neutral">Completed</span>',
 };
 
-function dutyCard(d) {
+// today, then upcoming, then completed - one flat list, in that order.
+function combinedDuties() {
+  const { today, upcoming, completed } = splitDuties();
+  return [...today, ...upcoming, ...completed];
+}
+
+// Rows-per-page state for the My Duties table (Home page). Reset to page 1
+// whenever the guard (re)opens Home - see render().
+let dutyPage = 1;
+let dutyPageSize = 10;
+
+// Clamps dutyPage into range for the current data/page size and returns the
+// slice to show. Called both when painting the table and when wiring the
+// pagination buttons, so both agree on the current page.
+function dutyPageSlice() {
+  const all = combinedDuties();
+  const total = all.length;
+  const totalPages = Math.max(1, Math.ceil(total / dutyPageSize));
+  if (dutyPage > totalPages) dutyPage = totalPages;
+  if (dutyPage < 1) dutyPage = 1;
+  const start = (dutyPage - 1) * dutyPageSize;
+  return { all, total, totalPages, start, pageItems: all.slice(start, start + dutyPageSize) };
+}
+
+// One row per duty: #, Duty Date Range, Status, Main Place, Sub Places.
+// A scanned sub place gets a green tick, an unscanned one a red cross - so a
+// guard can tell at a glance which sub places on a duty they still need to
+// visit.
+function subPlaceChip(sp) {
+  const icon = sp.scanned
+    ? '<span style="color:var(--success);">✓</span>'
+    : '<span style="color:var(--danger);">✗</span>';
+  return `<span class="chip">${icon} ${esc(sp.name)}</span>`;
+}
+
+function dutyRow(d, serial) {
   return `
-    <div class="card">
-      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span class="badge badge-amber">${esc(prettyRange(d.dateRange))}</span>
-        ${STATUS_BADGE[d.status] || ''}
+    <tr>
+      <td class="serial-col">${serial}</td>
+      <td style="white-space:nowrap;">${esc(prettyRange(d.dateRange))}</td>
+      <td>${STATUS_BADGE[d.status] || ''}</td>
+      <td class="preserve-space">${esc(d.mainPlace)}</td>
+      <td>${(d.subPlaces || []).map(subPlaceChip).join('')}</td>
+    </tr>`;
+}
+
+// Pagination toolbar (rows-per-page, Previous/Next, Download PDF) plus the
+// table for the current page. Returns '' when there is nothing to page
+// through - dutyPlaceholder() covers that case instead.
+function dutySection() {
+  const { pageItems, total, totalPages, start } = dutyPageSlice();
+  const rows = pageItems.map((d, i) => dutyRow(d, start + i + 1)).join('');
+  const rangeEnd = Math.min(start + dutyPageSize, total);
+
+  return `
+    <div style="display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="dutyPageSize" style="font-size:12.5px; color:var(--ink-500);">Rows per page</label>
+        <select id="dutyPageSize" class="pill-select">
+          ${[10, 20, 50, 100].map(n => `<option value="${n}" ${n === dutyPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+        </select>
       </div>
-      <div style="margin-top:10px; font-weight:700;">${esc(d.mainPlace)}</div>
-      <div style="margin-top:8px;">${(d.subPlaces || []).map(sp => `<span class="chip">${esc(sp)}</span>`).join('')}</div>
+      <button class="btn btn-outline" id="downloadDutiesPdfBtn" type="button" style="width:auto; padding:9px 16px;" ${total === 0 ? 'disabled' : ''}>⬇ Download PDF</button>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th class="serial-col">#</th><th>Duty Date Range</th><th>Status</th><th>Main Place</th><th>Sub Places</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:14px;">
+      <span style="font-size:12.5px; color:var(--ink-500);">${total === 0 ? 'Showing 0 of 0' : `Showing ${start + 1}-${rangeEnd} of ${total}`}</span>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="btn btn-outline" id="dutyPrevBtn" type="button" style="width:auto; padding:8px 16px;" ${dutyPage <= 1 ? 'disabled' : ''}>Previous</button>
+        <button class="btn btn-outline" id="dutyNextBtn" type="button" style="width:auto; padding:8px 16px;" ${dutyPage >= totalPages ? 'disabled' : ''}>Next</button>
+      </div>
     </div>`;
 }
 
@@ -176,25 +250,15 @@ function todayISODate() {
 
 const renderers = {
   home: () => {
-    const { today, upcoming, completed } = splitDuties();
-    const scheduled = today.length + upcoming.length;
-    const group = (label, list) => list.length
-      ? `<div class="card-title" style="margin:18px 0 10px;">${label} (${list.length})</div>${list.map(dutyCard).join('')}`
-      : '';
-
     return `
     ${sectionHead('Welcome back, ' + esc(user.first_name.split(' ')[0]), esc(user.designation) + ' • Roll No ' + esc(user.roll_no))}
-    <div class="grid-stats">
-      <div class="stat-card"><div class="num">${dutyState.loaded ? scheduled : '…'}</div><div class="label">Duty assignment(s) scheduled</div></div>
-      <div class="stat-card"><div class="num">6PM–6AM</div><div class="label">QR scan window</div></div>
-    </div>
     <div class="card">
       <div class="card-title">Reminder</div>
       <p style="color:var(--ink-300); font-size:13.5px;">QR scanning is only accepted between 6:00 PM and 6:00 AM. Scans outside this window will be rejected.</p>
     </div>
     <div class="section-head" style="margin:26px 0 4px;"><h2>My Duties</h2><p>Duties your admin has assigned to you.</p></div>
     ${staleWarning()}
-    ${dutyPlaceholder() || (group('Today', today) + group('Upcoming', upcoming) + group('Completed', completed))}
+    ${dutyPlaceholder() || dutySection()}
   `;
   },
 
@@ -257,23 +321,6 @@ const renderers = {
     </div>
   `,
 
-  profile: () => `
-    ${sectionHead('Update Profile Pic', 'View your details and update your photo.')}
-    <div class="card" style="max-width:420px; text-align:center;">
-      <div class="avatar avatar-xl" id="profileAvatar" style="margin:0 auto 16px;"></div>
-      <input type="file" id="profilePicInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
-      <button class="btn btn-outline" id="changePhotoBtn" style="width:auto; padding:8px 18px; margin-bottom:8px;">Change Photo</button>
-      <div class="error-text" id="profilePicError"></div>
-      <p style="color:var(--ink-500); font-size:11.5px; margin-bottom:14px;">JPG or PNG, up to 2 MB.</p>
-      <table style="text-align:left;">
-        <tr><td style="color:var(--ink-500);">Name</td><td>${esc(user.first_name)}</td></tr>
-        <tr><td style="color:var(--ink-500);">Designation</td><td>${esc(user.designation)}</td></tr>
-        <tr><td style="color:var(--ink-500);">Roll No</td><td>${esc(user.roll_no)}</td></tr>
-        <tr><td style="color:var(--ink-500);">Mobile</td><td>${esc(user.mobile)}</td></tr>
-      </table>
-    </div>
-  `,
-
   contact: () => `
     ${sectionHead('Contact Us', 'Reach the support team for help with the app.')}
     <div class="card" style="max-width:420px;">
@@ -288,48 +335,124 @@ function attachHandlers(section) {
   const retry = document.getElementById('retryDutiesBtn');
   if (retry) retry.addEventListener('click', () => render(section));
 
-  if (section === 'profile') {
-    fillAvatar(document.getElementById('profileAvatar'));
+  if (section === 'home') {
+    const sizeSel = document.getElementById('dutyPageSize');
+    const prevBtn = document.getElementById('dutyPrevBtn');
+    const nextBtn = document.getElementById('dutyNextBtn');
+    const pdfBtn = document.getElementById('downloadDutiesPdfBtn');
 
-    const picInput = document.getElementById('profilePicInput');
-    const changeBtn = document.getElementById('changePhotoBtn');
-    const picErr = document.getElementById('profilePicError');
+    // Pagination controls only exist once there are duties to page through
+    // (dutyPlaceholder() covers the loading/empty/error states instead).
+    if (sizeSel) {
+      sizeSel.addEventListener('change', () => {
+        dutyPageSize = Number(sizeSel.value) || 10;
+        dutyPage = 1;
+        paint('home'); // repaint from the data already loaded - no refetch
+      });
+      prevBtn.addEventListener('click', () => { dutyPage -= 1; paint('home'); });
+      nextBtn.addEventListener('click', () => { dutyPage += 1; paint('home'); });
 
-    changeBtn.addEventListener('click', () => picInput.click());
+pdfBtn.addEventListener('click', () => {
+        if (typeof jspdf === 'undefined' || !jspdf.jsPDF) {
+          alert('The PDF export library did not load. Check your internet connection and try again.');
+          return;
+        }
+        const all = combinedDuties();
+        const STATUS_LABEL = { today: 'Today', upcoming: 'Upcoming', completed: 'Completed' };
 
-    picInput.addEventListener('change', async () => {
-      picErr.textContent = '';
-      const file = picInput.files && picInput.files[0];
-      if (!file) return;
+        // One row per duty, Sub Places wrapped inline like a flowing sentence
+        // (comma-separated, several per line) - same shape as plain wrapped
+        // text, just with a tick/cross icon drawn before each name instead of
+        // printed [Y]/[N]. jsPDF's built-in font has no tick/cross/arrow
+        // glyphs and silently corrupts them if printed as text, so the icons
+        // are vector lines, not characters, which is why this needs manual
+        // layout instead of a plain autoTable text cell.
+        const ICON_COLUMN = 4;
+        const LINE_HEIGHT = 4.6; // mm per wrapped line
+        const CELL_TOP_PAD = 2.4; // mm, matches autoTable's own cell padding
+        const CELL_SIDE_PAD = 2; // mm
+        const ICON_GAP = 3.4; // mm reserved for icon + gap before the name
 
-      const ext = (file.name.split('.').pop() || '').toLowerCase();
-      if (!['jpg', 'jpeg', 'png'].includes(ext)) {
-        picErr.textContent = 'Only JPG, JPEG or PNG images are allowed.';
-        picInput.value = '';
-        return;
-      }
-      if (file.size > 2 * 1024 * 1024) {
-        picErr.textContent = 'Image is too large. Maximum size is 2 MB.';
-        picInput.value = '';
-        return;
-      }
+        const doc = new jspdf.jsPDF({ orientation: 'landscape' });
+        doc.setFontSize(8);
 
-      changeBtn.disabled = true;
-      changeBtn.textContent = 'Uploading...';
-      try {
-        const res = await uploadProfilePicViaApi(user.roll_no, file);
-        user.profile_pic = res.profile_pic;
-        setCurrentUser(user); // keep the session copy in sync
-        paintIdentity();
-        fillAvatar(document.getElementById('profileAvatar'));
-      } catch (err) {
-        picErr.textContent = err.message || 'Could not upload the photo.';
-      } finally {
-        changeBtn.disabled = false;
-        changeBtn.textContent = 'Change Photo';
-        picInput.value = '';
-      }
-    });
+        // Greedily wraps this duty's sub places into lines that fit
+        // maxWidth, keeping each "name, " as one unbreakable unit (so a line
+        // never breaks in the middle of a name) - the same function is used
+        // to measure how tall a row needs to be and, later, to actually draw
+        // it, so the two always agree.
+        function wrapSubPlaces(subs, maxWidth) {
+          const lines = [[]];
+          let x = 0;
+          subs.forEach((sp, i) => {
+            const unit = sp.name + (i === subs.length - 1 ? '' : ', ');
+            const chunkWidth = ICON_GAP + doc.getTextWidth(unit);
+            if (x > 0 && x + chunkWidth > maxWidth) {
+              lines.push([]);
+              x = 0;
+            }
+            lines[lines.length - 1].push({ sp, unit });
+            x += chunkWidth;
+          });
+          return lines;
+        }
+
+        const subColWidth = 130;
+        const wrapWidth = subColWidth - CELL_SIDE_PAD * 2;
+        const layouts = all.map((d) => wrapSubPlaces(d.subPlaces || [], wrapWidth));
+
+        const body = all.map((d, i) => [
+          String(i + 1),
+          prettyRange(d.dateRange).replace(' \u2192 ', ' to '),
+          STATUS_LABEL[d.status] || d.status,
+          d.mainPlace,
+          { content: '', styles: { minCellHeight: layouts[i].length * LINE_HEIGHT + CELL_TOP_PAD } },
+        ]);
+
+        doc.setFontSize(14);
+        doc.text(`My Duties - ${user.first_name} (${user.roll_no})`, 14, 15);
+        doc.setFontSize(10);
+        doc.text(`${all.length} duty assignment${all.length === 1 ? '' : 's'}`, 14, 21);
+        doc.setFontSize(8);
+
+        doc.autoTable({
+          startY: 26,
+          theme: 'grid',
+          head: [['#', 'Duty Date Range', 'Status', 'Main Place', 'Sub Places (tick = scanned)']],
+          body,
+          styles: { fontSize: 8, lineWidth: 0.1, lineColor: [38, 56, 90] },
+          headStyles: { fillColor: [18, 33, 58] },
+          columnStyles: { [ICON_COLUMN]: { cellWidth: subColWidth } },
+          didDrawCell: (data) => {
+            if (data.section !== 'body' || data.column.index !== ICON_COLUMN) return;
+            doc.setFontSize(8);
+            const { x, y } = data.cell;
+            const startX = x + CELL_SIDE_PAD;
+
+            layouts[data.row.index].forEach((line, li) => {
+              let cx = startX;
+              const cy = y + CELL_TOP_PAD + li * LINE_HEIGHT + 2;
+              line.forEach(({ sp, unit }) => {
+                doc.setLineWidth(0.55);
+                if (sp.scanned) {
+                  doc.setDrawColor(46, 160, 90); // green tick
+                  doc.line(cx - 0.2, cy - 0.2, cx + 1, cy + 1);
+                  doc.line(cx + 1, cy + 1, cx + 2.6, cy - 1.5);
+                } else {
+                  doc.setDrawColor(210, 60, 60); // red cross
+                  doc.line(cx, cy - 1.2, cx + 2.4, cy + 1.2);
+                  doc.line(cx, cy + 1.2, cx + 2.4, cy - 1.2);
+                }
+                doc.setTextColor(60, 60, 60);
+                doc.text(unit, cx + ICON_GAP, cy + 0.9);
+                cx += ICON_GAP + doc.getTextWidth(unit);
+              });
+            });
+          },
+        });
+        doc.save(`my_duties_${user.roll_no}.pdf`);
+      });
+    }
   }
 
   if (section === 'logs') {

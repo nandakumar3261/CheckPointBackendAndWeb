@@ -52,14 +52,26 @@ function isPastDutyDate(dutyDateIso) {
   return d.getTime() < today.getTime();
 }
 
+// Fills an .avatar element with the logged-in admin's uploaded profile
+// photo, or their first initial when they haven't uploaded one yet -
+// mirrors user.js's fillAvatar() for the guard side.
+function fillAvatar(el) {
+  if (!el || !user) return;
+  if (user.profile_pic) {
+    el.innerHTML = `<img src="${escapeHtml(user.profile_pic)}" alt="${escapeHtml(user.first_name)}">`;
+  } else {
+    el.textContent = user.first_name.charAt(0);
+  }
+}
+
 // Topbar "who" strip.
 document.getElementById('whoName').textContent = user ? user.first_name : '';
-document.getElementById('avatarInitial').textContent = user ? user.first_name.charAt(0) : '';
+fillAvatar(document.getElementById('avatarInitial'));
 
 // Sidebar brand slot - shows the logged-in user's own name/initial instead
 // of a static "ADMIN PANEL" label.
 document.getElementById('sidebarUserName').textContent = user ? user.first_name : '';
-document.getElementById('sidebarAvatar').textContent = user ? user.first_name.charAt(0) : '';
+fillAvatar(document.getElementById('sidebarAvatar'));
 
 document.querySelectorAll('.nav-link[data-section]').forEach(el => {
   el.addEventListener('click', () => {
@@ -209,6 +221,16 @@ const renderers = {
               </div>
               <div class="field"><label>Mobile</label><input required name="mobile" /></div>
               <div class="field"><label>Designation</label><input name="designation" placeholder="Security Guard" /></div>
+              <div class="field" style="grid-column: 1 / -1;">
+                <label>Profile Pic <span style="color:var(--ink-500); font-weight:400;">(optional)</span></label>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div class="avatar" id="newGuardAvatarPreview" style="width:48px; height:48px; font-size:18px; flex-shrink:0;">＋</div>
+                  <input type="file" id="newGuardPicInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
+                  <button type="button" class="btn btn-outline" id="newGuardPicBtn" style="width:auto; padding:8px 16px;">Choose Photo</button>
+                  <span style="color:var(--ink-500); font-size:11.5px;">JPG or PNG, max 2 MB</span>
+                </div>
+                <div class="error-text" id="newGuardPicError"></div>
+              </div>
             </div>
             <div class="error-text" id="addGuardError" style="margin-bottom:10px;"></div>
             <button class="btn btn-primary" style="width:auto; padding:10px 22px;" type="submit">Add Account</button>
@@ -372,7 +394,6 @@ const renderers = {
     <div class="tabs" id="dutyStatusTabs">
       <button class="tab-btn active" data-tab="assignDuty" type="button">Assign Duty to Guard</button>
       <button class="tab-btn" data-tab="showAssigned" type="button">Show Assigned Duties</button>
-      <button class="tab-btn" data-tab="finishedStatus" type="button">Duty Finished Status</button>
     </div>
 
     <div class="tab-panel" id="tab-assignDuty">
@@ -437,31 +458,16 @@ const renderers = {
         </div>
       </div>
     </div>
-
-    <div class="tab-panel" id="tab-finishedStatus" style="display:none;">
-      <div style="margin-bottom:14px;"><button class="btn btn-outline" id="exportPdfBtn">Export PDF</button></div>
-      ${MOCK.dutyStatus.map(s => {
-        const complete = s.scanned >= s.total;
-        const pct = Math.round((s.scanned / s.total) * 100);
-        return `
-        <div class="card">
-          <div style="display:flex; justify-content:space-between;">
-            <b>${s.guardLabel}</b>
-            <span class="badge ${complete ? 'badge-success' : 'badge-danger'}">${complete ? 'Complete' : 'Pending'}</span>
-          </div>
-          <div style="color:var(--ink-500); font-size:13px;">${s.place}</div>
-          <div class="progress-track"><div class="progress-fill ${complete ? 'complete' : ''}" style="width:${pct}%;"></div></div>
-          <div style="font-size:11.5px; color:var(--ink-500);">${s.scanned} / ${s.total} sub-places scanned • ${s.dateRange}</div>
-        </div>`;
-      }).join('')}
-    </div>
   `,
 
   profile: () => `
     ${sectionHead('Update Profile Pic', 'View your profile details and update your photo.')}
     <div class="card" style="max-width:420px; text-align:center;">
-      <div class="avatar" style="width:80px; height:80px; font-size:28px; margin:0 auto 16px;">${user.first_name.charAt(0)}</div>
-      <button class="btn btn-outline" style="width:auto; padding:8px 18px; margin-bottom:18px;">Change Photo</button>
+      <div class="avatar" id="profileAvatar" style="width:80px; height:80px; font-size:28px; margin:0 auto 16px;">${user.first_name.charAt(0)}</div>
+      <input type="file" id="profilePicInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none;">
+      <button class="btn btn-outline" id="changePhotoBtn" style="width:auto; padding:8px 18px; margin-bottom:6px;">Change Photo</button>
+      <div class="error-text" id="profilePicError"></div>
+      <p style="color:var(--ink-500); font-size:11.5px; margin-bottom:18px;">JPG or PNG only, max 2 MB.</p>
       <table style="text-align:left;">
         <tr><td style="color:var(--ink-500);">Name</td><td>${user.first_name}</td></tr>
         <tr><td style="color:var(--ink-500);">Designation</td><td>${user.designation}</td></tr>
@@ -487,13 +493,15 @@ function attachHandlers(section) {
       .then(res => { document.getElementById('guardsCountStat').textContent = res.total; })
       .catch(() => { document.getElementById('guardsCountStat').textContent = '—'; });
 
-    fetchDutyPlacesViaApi({ limit: 1 })
-      .then(res => { document.getElementById('dutyPlacesCountStat').textContent = res.total; })
-      .catch(() => { document.getElementById('dutyPlacesCountStat').textContent = '—'; });
-
-    fetchDutyAssignmentStatsViaApi()
-      .then(res => { document.getElementById('activeSubPlacesStat').textContent = res.totalSubPlaces; })
-      .catch(() => { document.getElementById('activeSubPlacesStat').textContent = '—'; });
+    fetchDutyPlaceStatsViaApi()
+      .then(res => {
+        document.getElementById('dutyPlacesCountStat').textContent = res.totalMainPlaces;
+        document.getElementById('activeSubPlacesStat').textContent = res.totalSubPlaces;
+      })
+      .catch(() => {
+        document.getElementById('dutyPlacesCountStat').textContent = '—';
+        document.getElementById('activeSubPlacesStat').textContent = '—';
+      });
 
     fetchQrScansViaApi({ date: todayISODate(), limit: 1 })
       .then(res => { document.getElementById('qrScansTodayStat').textContent = res.total; })
@@ -1012,6 +1020,71 @@ function attachHandlers(section) {
     // Tab: Add Security (single account form + CSV bulk upload)
     // ======================================================================
     const added = [];
+
+    // ---- Optional profile pic on the "New account" form ----
+    // jpg/png only, max 2 MB, must decode as a real image - same rules as
+    // the Update Profile Pic tab. Purely optional: if nothing is picked, the
+    // account is created with no photo, exactly like before. Not offered for
+    // the CSV bulk upload below - that stays text-only, unchanged.
+    const ALLOWED_PIC_TYPES = ['image/jpeg', 'image/png'];
+    const ALLOWED_PIC_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+    const MAX_PIC_SIZE = 2 * 1024 * 1024; // 2 MB
+
+    const newGuardPicInput = document.getElementById('newGuardPicInput');
+    const newGuardPicBtn = document.getElementById('newGuardPicBtn');
+    const newGuardPicError = document.getElementById('newGuardPicError');
+    const newGuardAvatarPreview = document.getElementById('newGuardAvatarPreview');
+    let newGuardPicFile = null;
+
+    function resetNewGuardPic() {
+      newGuardPicFile = null;
+      newGuardPicInput.value = '';
+      newGuardAvatarPreview.innerHTML = '＋';
+    }
+
+    newGuardPicBtn.addEventListener('click', () => newGuardPicInput.click());
+
+    newGuardPicInput.addEventListener('change', () => {
+      newGuardPicError.textContent = '';
+      const file = newGuardPicInput.files && newGuardPicInput.files[0];
+      if (!file) return;
+
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const isAllowedType = ALLOWED_PIC_TYPES.includes(file.type) || ALLOWED_PIC_EXTENSIONS.includes(ext);
+      if (!isAllowedType) {
+        newGuardPicError.textContent = 'Only JPG, JPEG or PNG images are allowed.';
+        resetNewGuardPic();
+        return;
+      }
+      if (file.size > MAX_PIC_SIZE) {
+        newGuardPicError.textContent = `Image is too large (${(file.size / 1024).toFixed(1)} KB). Maximum size is 2 MB.`;
+        resetNewGuardPic();
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Confirm the browser can actually decode this as an image before
+        // accepting it - catches a corrupt file or a non-image renamed to
+        // .jpg/.png.
+        const probe = new Image();
+        probe.onload = () => {
+          newGuardPicFile = file;
+          newGuardAvatarPreview.innerHTML = `<img src="${reader.result}" alt="Preview">`;
+        };
+        probe.onerror = () => {
+          newGuardPicError.textContent = 'This file is not a valid image. Please pick a different JPG or PNG.';
+          resetNewGuardPic();
+        };
+        probe.src = reader.result;
+      };
+      reader.onerror = () => {
+        newGuardPicError.textContent = 'Could not read the selected file. Please try again.';
+        resetNewGuardPic();
+      };
+      reader.readAsDataURL(file);
+    });
+
     document.getElementById('addGuardForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errBox = document.getElementById('addGuardError');
@@ -1029,9 +1102,31 @@ function attachHandlers(section) {
       submitBtn.disabled = true;
       try {
         const saved = await addUserViaApi(payload);
+
+        // The photo is a second, independent request against the account
+        // we just created - if it fails, the account still exists, it's
+        // just left without a photo for now (the admin can add one later
+        // from that guard's own Update Profile Pic screen).
+        if (newGuardPicFile) {
+          try {
+            const { profile_pic } = await uploadProfilePicViaApi(saved.roll_no, newGuardPicFile);
+            saved.profile_pic = profile_pic;
+          } catch (picErr) {
+            errBox.textContent = `Account created, but the photo could not be uploaded: ${picErr.message}`;
+          }
+        }
+
         added.unshift(saved);
-        document.getElementById('addedGuardsList').innerHTML = added.map(g => `<div style="padding:8px 0; border-bottom:1px solid var(--navy-line); font-size:13px;"><b>${g.first_name}</b> <span class="badge badge-amber">${g.role}</span><br><span style="color:var(--ink-500);">${g.roll_no} • ${g.mobile} • ${g.designation}</span></div>`).join('');
+        document.getElementById('addedGuardsList').innerHTML = added.map(g => `
+          <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--navy-line); font-size:13px;">
+            <div class="avatar" style="width:32px; height:32px; font-size:13px; flex-shrink:0;">${g.profile_pic ? `<img src="${escapeHtml(g.profile_pic)}" alt="${escapeHtml(g.first_name)}">` : escapeHtml(g.first_name.charAt(0))}</div>
+            <div>
+              <b>${escapeHtml(g.first_name)}</b> <span class="badge badge-amber">${g.role}</span><br>
+              <span style="color:var(--ink-500);">${escapeHtml(g.roll_no)} • ${escapeHtml(g.mobile)} • ${escapeHtml(g.designation)}</span>
+            </div>
+          </div>`).join('');
         e.target.reset();
+        resetNewGuardPic();
       } catch (err) {
         errBox.textContent = err.message;
       } finally {
@@ -1103,10 +1198,15 @@ function attachHandlers(section) {
         wrap.innerHTML = `
           <div class="table-scroll">
             <table>
-              <thead><tr><th>#</th><th>Name</th><th>Roll No</th><th>Role</th><th>Mobile</th><th>Designation</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th></th><th>#</th><th>Name</th><th>Roll No</th><th>Role</th><th>Mobile</th><th>Designation</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 ${res.data.map((u, i) => `
                   <tr data-id="${u._id}">
+                    <td>
+                      <button type="button" class="avatar-btn" data-id="${u._id}" title="Change photo">
+                        <div class="avatar">${u.profile_pic ? `<img src="${escapeHtml(u.profile_pic)}" alt="${escapeHtml(u.first_name)}">` : escapeHtml(u.first_name.charAt(0))}</div>
+                      </button>
+                    </td>
                     <td class="serial-col">${startSerial + i + 1}</td>
                     <td>${u.first_name}</td>
                     <td>${u.roll_no}</td>
@@ -1144,6 +1244,12 @@ function attachHandlers(section) {
     };
 
     function wireRowActions() {
+      document.querySelectorAll('#tab-securityInfo .avatar-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const u = currentRows.find(r => r._id === btn.dataset.id);
+          if (u) openPhotoModal(u);
+        });
+      });
       document.querySelectorAll('#tab-securityInfo .edit-btn').forEach(btn => {
         btn.addEventListener('click', () => openEditModal(btn.dataset.id));
       });
@@ -1172,6 +1278,96 @@ function attachHandlers(section) {
           }
         });
       });
+    }
+
+    // Photo upload/change - same validated-file flow as the admin's own
+    // "Update Profile Pic" tab (type/extension check, size check, then a
+    // decode probe before it's ever sent), just aimed at whichever guard's
+    // row was clicked instead of the logged-in admin.
+    function openPhotoModal(u) {
+      const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png'];
+      const ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+      const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2 MB
+      const formatKB = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
+
+      openModal(`
+        <h3>Change photo — ${escapeHtml(u.first_name)} (${escapeHtml(u.roll_no)})</h3>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:14px;">
+          <div class="avatar avatar-lg" id="photoModalAvatar" style="width:84px; height:84px; font-size:30px;">
+            ${u.profile_pic ? `<img src="${escapeHtml(u.profile_pic)}" alt="${escapeHtml(u.first_name)}">` : escapeHtml(u.first_name.charAt(0))}
+          </div>
+          <input type="file" id="photoModalInput" accept="image/jpeg,image/png" style="display:none;" />
+          <button type="button" class="btn btn-outline" id="photoModalChooseBtn" style="width:auto; padding:8px 18px;">Choose Photo</button>
+          <div class="error-text" id="photoModalError"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="photoModalCloseBtn">Close</button>
+          </div>
+        </div>
+      `);
+
+      const input = document.getElementById('photoModalInput');
+      const chooseBtn = document.getElementById('photoModalChooseBtn');
+      const errBox = document.getElementById('photoModalError');
+      const avatarEl = document.getElementById('photoModalAvatar');
+
+      document.getElementById('photoModalCloseBtn').addEventListener('click', closeModal);
+      chooseBtn.addEventListener('click', () => input.click());
+
+      input.addEventListener('change', () => {
+        errBox.textContent = '';
+        const file = input.files && input.files[0];
+        if (!file) return;
+
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const isAllowedType = ALLOWED_IMAGE_TYPES.includes(file.type) || ALLOWED_IMAGE_EXTENSIONS.includes(ext);
+        if (!isAllowedType) {
+          errBox.textContent = 'Only JPG, JPEG or PNG images are allowed.';
+          input.value = '';
+          return;
+        }
+        if (file.size > MAX_IMAGE_SIZE) {
+          errBox.textContent = `Image is too large (${formatKB(file.size)}). Maximum size is 2 MB.`;
+          input.value = '';
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          // Confirm the browser can actually decode this as an image before
+          // uploading it - catches a corrupt file or a non-image renamed to
+          // .jpg/.png.
+          const probe = new Image();
+          probe.onload = () => uploadPhoto(file);
+          probe.onerror = () => {
+            errBox.textContent = 'This file is not a valid image. Please pick a different JPG or PNG.';
+            input.value = '';
+          };
+          probe.src = reader.result;
+        };
+        reader.onerror = () => {
+          errBox.textContent = 'Could not read the selected file. Please try again.';
+          input.value = '';
+        };
+        reader.readAsDataURL(file);
+      });
+
+      async function uploadPhoto(file) {
+        errBox.textContent = '';
+        chooseBtn.disabled = true;
+        const originalLabel = chooseBtn.textContent;
+        chooseBtn.textContent = 'Uploading...';
+        try {
+          const { profile_pic } = await uploadProfilePicViaApi(u.roll_no, file);
+          avatarEl.innerHTML = `<img src="${escapeHtml(profile_pic)}" alt="${escapeHtml(u.first_name)}">`;
+          load(); // refresh the table row behind the modal too
+        } catch (err) {
+          errBox.textContent = err.message || 'Could not upload the photo.';
+        } finally {
+          input.value = '';
+          chooseBtn.disabled = false;
+          chooseBtn.textContent = originalLabel;
+        }
+      }
     }
 
     function openEditModal(id) {
@@ -1745,7 +1941,7 @@ function attachHandlers(section) {
 
   if (section === 'dutyStatus') {
     // ---------- Tab switching ----------
-    const dsTabNames = ['assignDuty', 'showAssigned', 'finishedStatus'];
+    const dsTabNames = ['assignDuty', 'showAssigned'];
     document.querySelectorAll('#dutyStatusTabs .tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('#dutyStatusTabs .tab-btn').forEach(b => b.classList.remove('active'));
@@ -2332,12 +2528,91 @@ function attachHandlers(section) {
         btn.textContent = originalLabel;
       }
     });
+  }
 
+  if (section === 'profile') {
     // ======================================================================
-    // Tab 3: Duty Finished Status - placeholder, still static mock data
-    // (requirements for this tab to be given separately)
+    // Update Profile Pic - jpg/png only, max 2 MB, and must actually decode
+    // as an image (same defense-in-depth pattern as the Images tab); the
+    // server (routes/users.js, POST /by-roll/:roll_no/profile-pic) re-checks
+    // type/size and the real file signature independently.
     // ======================================================================
-    document.getElementById('exportPdfBtn').addEventListener('click', () => alert('PDF export simulated'));
+    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png'];
+    const ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+    const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2 MB
+
+    const picInput = document.getElementById('profilePicInput');
+    const changeBtn = document.getElementById('changePhotoBtn');
+    const errBox = document.getElementById('profilePicError');
+    const avatarEl = document.getElementById('profileAvatar');
+    fillAvatar(avatarEl); // show the existing photo (if any) instead of just the initial
+
+    function formatKB(bytes) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    changeBtn.addEventListener('click', () => picInput.click());
+
+    picInput.addEventListener('change', () => {
+      errBox.textContent = '';
+      const file = picInput.files && picInput.files[0];
+      if (!file) return;
+
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const isAllowedType = ALLOWED_IMAGE_TYPES.includes(file.type) || ALLOWED_IMAGE_EXTENSIONS.includes(ext);
+      if (!isAllowedType) {
+        errBox.textContent = 'Only JPG, JPEG or PNG images are allowed.';
+        picInput.value = '';
+        return;
+      }
+      if (file.size > MAX_IMAGE_SIZE) {
+        errBox.textContent = `Image is too large (${formatKB(file.size)}). Maximum size is 2 MB.`;
+        picInput.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Confirm the browser can actually decode this as an image before
+        // uploading it - catches a corrupt file or a non-image renamed to
+        // .jpg/.png.
+        const probe = new Image();
+        probe.onload = () => uploadProfilePic(file);
+        probe.onerror = () => {
+          errBox.textContent = 'This file is not a valid image. Please pick a different JPG or PNG.';
+          picInput.value = '';
+        };
+        probe.src = reader.result;
+      };
+      reader.onerror = () => {
+        errBox.textContent = 'Could not read the selected file. Please try again.';
+        picInput.value = '';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    async function uploadProfilePic(file) {
+      errBox.textContent = '';
+      changeBtn.disabled = true;
+      const originalLabel = changeBtn.textContent;
+      changeBtn.textContent = 'Uploading...';
+      try {
+        const { profile_pic } = await uploadProfilePicViaApi(user.roll_no, file);
+        // Keep the in-memory user object, sessionStorage, and every avatar
+        // spot on the page (topbar, sidebar, this tab) all in sync.
+        user.profile_pic = profile_pic;
+        setCurrentUser(user);
+        fillAvatar(avatarEl);
+        fillAvatar(document.getElementById('avatarInitial'));
+        fillAvatar(document.getElementById('sidebarAvatar'));
+      } catch (err) {
+        errBox.textContent = err.message || 'Could not upload the photo.';
+      } finally {
+        picInput.value = '';
+        changeBtn.disabled = false;
+        changeBtn.textContent = originalLabel;
+      }
+    }
   }
 }
 

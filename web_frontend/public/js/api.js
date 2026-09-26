@@ -105,6 +105,17 @@ async function fetchDutyPlaceOptionsViaApi() {
   return readJsonResponse(res); // { data }
 }
 
+/**
+ * Home dashboard's "Main locations" and "Sub places" cards: both counts come
+ * straight from the DutyPlace collection (see GET /api/duty-places/stats),
+ * so "Sub places" reflects every sub-place on record, not just the ones
+ * currently covered by a duty assignment.
+ */
+async function fetchDutyPlaceStatsViaApi() {
+  const res = await fetch('/api/duty-places/stats');
+  return readJsonResponse(res); // { totalMainPlaces, totalSubPlaces }
+}
+
 async function addDutyPlaceViaApi(payload) {
   const res = await fetch('/api/duty-places', {
     method: 'POST',
