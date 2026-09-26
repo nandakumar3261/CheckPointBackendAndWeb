@@ -277,6 +277,7 @@ const renderers = {
               </select>
             </div>
             <button class="btn btn-outline" id="downloadSecurityBtn" type="button">⬇ Download Excel</button>
+            <button class="btn btn-outline" id="downloadSecurityPdfBtn" type="button">⬇ Download PDF</button>
           </div>
         </div>
         <div id="securityDataTableWrap"><p style="color:var(--ink-500); font-size:13px;">Loading from MongoDB...</p></div>
@@ -434,8 +435,7 @@ const renderers = {
             <input type="text" id="assignedSearchInput" placeholder="Search by guard or main place..." />
           </div>
           <div class="toolbar-right">
-            <input type="date" id="assignedDateFilter" title="Filter by duty date" />
-            <span class="clear-date-link" id="clearAssignedDateBtn">Clear date</span>
+            <input type="date" id="assignedDateFilter" title="Filter by duty date" value="${todayISODate()}" />
             <div class="page-size-field">
               <label for="assignedPageSizeSelect">Rows per page</label>
               <select id="assignedPageSizeSelect">
@@ -1470,6 +1470,22 @@ function attachHandlers(section) {
       }
     });
 
+    document.getElementById('downloadSecurityPdfBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('downloadSecurityPdfBtn');
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Preparing...';
+      try {
+        const res = await fetchUsersViaApi({ search: state.search, page: 1, limit: 10000 });
+        await exportSecurityDataToPdf(res.data, { filename: `security_data_${Date.now()}.pdf` });
+      } catch (err) {
+        alert('Could not export: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    });
+
     load();
   }
 
@@ -2231,34 +2247,57 @@ function attachHandlers(section) {
 
       if (!dutyDate) { alert('Pick a duty date first.'); return; }
       if (dutyDate < todayISODate()) { alert('Duty date cannot be in the past. Please choose today or a later date.'); return; }
-      if (pendingDuties.length === 0) { alert('Drag at least one main place (and a guard) into the Duty Assignments column first.'); return; }
+      // Nothing to show at all - no new duties dragged in AND nothing already
+      // assigned for this date either. If some are already assigned, still
+      // let Preview open so those can be reviewed even with 0 new ones.
+      if (pendingDuties.length === 0 && existingDutiesForDate.length === 0) {
+        alert('Drag at least one main place (and a guard) into the Duty Assignments column first.');
+        return;
+      }
       const incomplete = pendingDuties.filter(d => !d.guardEmpId);
       if (incomplete.length > 0) { alert(`${incomplete.length} duty card(s) still need a guard dropped onto them before you can preview.`); return; }
 
       previewWrap.innerHTML = `
         <div style="margin-top:16px;">
-          <div class="card-title" style="margin-bottom:10px;">Preview — ${pendingDuties.length} duty assignment(s) for ${dutyDate}</div>
+          <div class="card-title" style="margin-bottom:10px;">Preview — ${pendingDuties.length} new duty assignment(s) for ${dutyDate}${existingDutiesForDate.length ? ` (${existingDutiesForDate.length} already assigned)` : ''}</div>
           <div class="table-scroll">
             <table>
-              <thead><tr><th>#</th><th>Guard</th><th>Main Place</th><th>Sub Places</th></tr></thead>
+              <thead><tr><th>#</th><th>Guard</th><th>Main Place</th><th>Sub Places</th><th>Status</th></tr></thead>
               <tbody>
-                ${pendingDuties.map((d, i) => `
+                ${existingDutiesForDate.map((d, i) => `
                   <tr>
                     <td class="serial-col">${i + 1}</td>
+                    <td><b>${d.guardName}</b> <span style="color:var(--ink-500);">(${d.guardEmpId})</span></td>
+                    <td class="preserve-space">${d.mainPlace}</td>
+                    <td>${(d.subPlaces || []).map(s => `<span class="chip">${s}</span>`).join('')}</td>
+                    <td><span class="badge badge-neutral">Already assigned</span></td>
+                  </tr>`).join('')}
+                ${pendingDuties.map((d, i) => `
+                  <tr>
+                    <td class="serial-col">${existingDutiesForDate.length + i + 1}</td>
                     <td><b>${d.guardName}</b></td>
                     <td class="preserve-space">${d.mainPlace}</td>
                     <td>${d.subPlaces.map(s => `<span class="chip">${s}</span>`).join('')}</td>
+                    <td><span class="badge badge-amber">New</span></td>
                   </tr>`).join('')}
               </tbody>
             </table>
           </div>
-          <label style="display:flex; align-items:center; gap:8px; margin:16px 0; font-size:13px; cursor:pointer;">
-            <input type="checkbox" id="confirmAssignCheck" />
-            I've reviewed these duty assignments and confirm they are correct.
-          </label>
-          <div class="error-text" id="assignSubmitError"></div>
-          <button class="btn btn-primary" id="submitAssignBtn" style="width:auto; padding:10px 22px;" disabled>Submit</button>
+          ${pendingDuties.length > 0 ? `
+            <label style="display:flex; align-items:center; gap:8px; margin:16px 0; font-size:13px; cursor:pointer;">
+              <input type="checkbox" id="confirmAssignCheck" />
+              I've reviewed these duty assignments and confirm they are correct.
+            </label>
+            <div class="error-text" id="assignSubmitError"></div>
+            <button class="btn btn-primary" id="submitAssignBtn" style="width:auto; padding:10px 22px;" disabled>Submit</button>
+          ` : `
+            <p style="color:var(--ink-500); font-size:13px; margin-top:16px;">No new duty assignments to submit - drag a main place and a guard into the Duty Assignments column to add one.</p>
+          `}
         </div>`;
+
+      // Only wire up confirm/submit when there's something new to submit -
+      // the elements above only exist in that branch of the template.
+      if (pendingDuties.length === 0) return;
 
       document.getElementById('confirmAssignCheck').addEventListener('change', (e) => {
         document.getElementById('submitAssignBtn').disabled = !e.target.checked;
@@ -2307,7 +2346,7 @@ function attachHandlers(section) {
     // ======================================================================
     // Tab 2: Show Assigned Duties (list + edit + delete)
     // ======================================================================
-    const assignedState = { search: '', date: '', page: 1, limit: 10 };
+    const assignedState = { search: '', date: todayISODate(), page: 1, limit: 10 };
     let currentAssignments = [];
 
     function renderAssignedTable(res) {
@@ -2475,12 +2514,6 @@ function attachHandlers(section) {
     });
     document.getElementById('assignedDateFilter').addEventListener('change', (e) => {
       assignedState.date = e.target.value;
-      assignedState.page = 1;
-      loadAssignedDuties();
-    });
-    document.getElementById('clearAssignedDateBtn').addEventListener('click', () => {
-      document.getElementById('assignedDateFilter').value = '';
-      assignedState.date = '';
       assignedState.page = 1;
       loadAssignedDuties();
     });
